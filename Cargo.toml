@@ -8,8 +8,7 @@ name = "wgpu-rs-automata"
 path = "src/main.rs"
 
 [lib]
-
-name = "wgpu_rs_automata"
+name = "wgpu_rs_automata_lib"
 path = "src/lib.rs"
 crate-type = ["cdylib", "rlib"]
 

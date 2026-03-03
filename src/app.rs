@@ -105,9 +105,22 @@ impl ApplicationHandler<State> for App {
         match event {
             WindowEvent::CloseRequested => event_loop.exit(),
             WindowEvent::Resized(size) => state.resize(size.width, size.height),
+
             WindowEvent::RedrawRequested => {
-                state.render();
+                state.update();
+                match state.render() {
+                    Ok(_) => {}
+                    // Reconfigure the surface if it's lost or outdated
+                    Err(wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated) => {
+                        let size = state.window.inner_size();
+                        state.resize(size.width, size.height);
+                    }
+                    Err(e) => {
+                        log::error!("Unable to render {}", e);
+                    }
+                }
             }
+
             WindowEvent::KeyboardInput {
                 event:
                     KeyEvent {
@@ -116,10 +129,16 @@ impl ApplicationHandler<State> for App {
                         ..
                     },
                 ..
-            } => match (code, key_state.is_pressed()) {
-                (KeyCode::Escape, true) => event_loop.exit(),
-                _ => {}
+            } => state.handle_key(event_loop, code, key_state.is_pressed()),
+
+            WindowEvent::CursorMoved 
+            {
+                position,
+                ..
+            } => {
+                state.handle_mouse_moved(&position);
             },
+
             _ => {}
         }
     }
