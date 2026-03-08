@@ -1,0 +1,17 @@
+[workspace]
+resolver = "2"
+members  = [
+    "gpu-automata",
+    "lif-viewer",
+]
+
+# ── Shared dependency versions ────────────────────────────────────────────────
+# Pin versions here once; each crate inherits with `{ workspace = true }`.
+[workspace.dependencies]
+wgpu       = "22"
+winit      = "0.30"
+bytemuck   = { version = "1", features = ["derive"] }
+log        = "0.4"
+pollster   = "0.3"
+anyhow     = "1"
+env_logger = "0.11"
