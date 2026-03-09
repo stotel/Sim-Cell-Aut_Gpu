@@ -1,0 +1,74 @@
+Date : 2026-03-09 02:20:31
+Directory : c:\Users\User\Downloads\life-viewer-workspace(1)\life-viewer-workspace
+Total : 33 files,  6435 codes, 635 comments, 920 blanks, all 7990 lines
+
+Languages
++----------+------------+------------+------------+------------+------------+
+| language | files      | code       | comment    | blank      | total      |
++----------+------------+------------+------------+------------+------------+
+| TOML     |          4 |      3,821 |         12 |        434 |      4,267 |
+| Rust     |         28 |      2,483 |        623 |        449 |      3,555 |
+| Markdown |          1 |        131 |          0 |         37 |        168 |
++----------+------------+------------+------------+------------+------------+
+
+Directories
++----------------------------------------------------------------------------------------------------------------+------------+------------+------------+------------+------------+
+| path                                                                                                           | files      | code       | comment    | blank      | total      |
++----------------------------------------------------------------------------------------------------------------+------------+------------+------------+------------+------------+
+| .                                                                                                              |         33 |      6,435 |        635 |        920 |      7,990 |
+| . (Files)                                                                                                      |          2 |      3,783 |          4 |        423 |      4,210 |
+| gpu-automata                                                                                                   |         26 |      1,789 |        475 |        330 |      2,594 |
+| gpu-automata (Files)                                                                                           |          2 |        148 |          0 |         41 |        189 |
+| gpu-automata\src                                                                                               |         24 |      1,641 |        475 |        289 |      2,405 |
+| gpu-automata\src (Files)                                                                                       |          1 |         11 |         12 |          3 |         26 |
+| gpu-automata\src\automata                                                                                      |          4 |        396 |         86 |         66 |        548 |
+| gpu-automata\src\cell                                                                                          |          3 |         95 |         40 |         23 |        158 |
+| gpu-automata\src\render                                                                                        |          2 |        165 |          8 |         16 |        189 |
+| gpu-automata\src\rule_graph                                                                                    |          5 |        432 |        150 |         82 |        664 |
+| gpu-automata\src\shader                                                                                        |          3 |        182 |         69 |         32 |        283 |
+| gpu-automata\src\sparse                                                                                        |          2 |         64 |         44 |         15 |        123 |
+| gpu-automata\src\topology                                                                                      |          4 |        296 |         66 |         52 |        414 |
+| lif-viewer                                                                                                     |          5 |        863 |        156 |        167 |      1,186 |
+| lif-viewer (Files)                                                                                             |          1 |         21 |          8 |          7 |         36 |
+| lif-viewer\src                                                                                                 |          4 |        842 |        148 |        160 |      1,150 |
++----------------------------------------------------------------------------------------------------------------+------------+------------+------------+------------+------------+
+
+Files
++----------------------------------------------------------------------------------------------------------------+----------+------------+------------+------------+------------+
+| filename                                                                                                       | language | code       | comment    | blank      | total      |
++----------------------------------------------------------------------------------------------------------------+----------+------------+------------+------------+------------+
+| c:\Users\User\Downloads\life-viewer-workspace(1)\life-viewer-workspace\Cargo.lock                              | TOML     |      3,769 |          2 |        421 |      4,192 |
+| c:\Users\User\Downloads\life-viewer-workspace(1)\life-viewer-workspace\Cargo.toml                              | TOML     |         14 |          2 |          2 |         18 |
+| c:\Users\User\Downloads\life-viewer-workspace(1)\life-viewer-workspace\gpu-automata\Cargo.toml                 | TOML     |         17 |          0 |          4 |         21 |
+| c:\Users\User\Downloads\life-viewer-workspace(1)\life-viewer-workspace\gpu-automata\README.md                  | Markdown |        131 |          0 |         37 |        168 |
+| c:\Users\User\Downloads\life-viewer-workspace(1)\life-viewer-workspace\gpu-automata\src\automata\buffers.rs    | Rust     |        107 |         30 |         19 |        156 |
+| c:\Users\User\Downloads\life-viewer-workspace(1)\life-viewer-workspace\gpu-automata\src\automata\engine.rs     | Rust     |        182 |         51 |         36 |        269 |
+| c:\Users\User\Downloads\life-viewer-workspace(1)\life-viewer-workspace\gpu-automata\src\automata\mod.rs        | Rust     |          3 |          1 |          1 |          5 |
+| c:\Users\User\Downloads\life-viewer-workspace(1)\life-viewer-workspace\gpu-automata\src\automata\pipeline.rs   | Rust     |        104 |          4 |         10 |        118 |
+| c:\Users\User\Downloads\life-viewer-workspace(1)\life-viewer-workspace\gpu-automata\src\cell\field.rs          | Rust     |         42 |         12 |          8 |         62 |
+| c:\Users\User\Downloads\life-viewer-workspace(1)\life-viewer-workspace\gpu-automata\src\cell\mod.rs            | Rust     |          2 |          1 |          1 |          4 |
+| c:\Users\User\Downloads\life-viewer-workspace(1)\life-viewer-workspace\gpu-automata\src\cell\schema.rs         | Rust     |         51 |         27 |         14 |         92 |
+| c:\Users\User\Downloads\life-viewer-workspace(1)\life-viewer-workspace\gpu-automata\src\lib.rs                 | Rust     |         11 |         12 |          3 |         26 |
+| c:\Users\User\Downloads\life-viewer-workspace(1)\life-viewer-workspace\gpu-automata\src\render\mod.rs          | Rust     |          1 |          1 |          1 |          3 |
+| c:\Users\User\Downloads\life-viewer-workspace(1)\life-viewer-workspace\gpu-automata\src\render\renderer.rs     | Rust     |        164 |          7 |         15 |        186 |
+| c:\Users\User\Downloads\life-viewer-workspace(1)\life-viewer-workspace\gpu-automata\src\rule_graph\compiler.rs | Rust     |        208 |         42 |         20 |        270 |
+| c:\Users\User\Downloads\life-viewer-workspace(1)\life-viewer-workspace\gpu-automata\src\rule_graph\graph.rs    | Rust     |        108 |         43 |         30 |        181 |
+| c:\Users\User\Downloads\life-viewer-workspace(1)\life-viewer-workspace\gpu-automata\src\rule_graph\mod.rs      | Rust     |          4 |          1 |          1 |          6 |
+| c:\Users\User\Downloads\life-viewer-workspace(1)\life-viewer-workspace\gpu-automata\src\rule_graph\node.rs     | Rust     |         76 |         57 |         26 |        159 |
+| c:\Users\User\Downloads\life-viewer-workspace(1)\life-viewer-workspace\gpu-automata\src\rule_graph\wgsl.rs     | Rust     |         36 |          7 |          5 |         48 |
+| c:\Users\User\Downloads\life-viewer-workspace(1)\life-viewer-workspace\gpu-automata\src\shader\builder.rs      | Rust     |        141 |         53 |         23 |        217 |
+| c:\Users\User\Downloads\life-viewer-workspace(1)\life-viewer-workspace\gpu-automata\src\shader\mod.rs          | Rust     |          2 |          1 |          1 |          4 |
+| c:\Users\User\Downloads\life-viewer-workspace(1)\life-viewer-workspace\gpu-automata\src\shader\templates.rs    | Rust     |         39 |         15 |          8 |         62 |
+| c:\Users\User\Downloads\life-viewer-workspace(1)\life-viewer-workspace\gpu-automata\src\sparse\active_set.rs   | Rust     |         63 |         43 |         14 |        120 |
+| c:\Users\User\Downloads\life-viewer-workspace(1)\life-viewer-workspace\gpu-automata\src\sparse\mod.rs          | Rust     |          1 |          1 |          1 |          3 |
+| c:\Users\User\Downloads\life-viewer-workspace(1)\life-viewer-workspace\gpu-automata\src\topology\grid2d.rs     | Rust     |        100 |         23 |         17 |        140 |
+| c:\Users\User\Downloads\life-viewer-workspace(1)\life-viewer-workspace\gpu-automata\src\topology\grid3d.rs     | Rust     |        116 |         12 |         16 |        144 |
+| c:\Users\User\Downloads\life-viewer-workspace(1)\life-viewer-workspace\gpu-automata\src\topology\hex.rs        | Rust     |         71 |         10 |         13 |         94 |
+| c:\Users\User\Downloads\life-viewer-workspace(1)\life-viewer-workspace\gpu-automata\src\topology\mod.rs        | Rust     |          9 |         21 |          6 |         36 |
+| c:\Users\User\Downloads\life-viewer-workspace(1)\life-viewer-workspace\lif-viewer\Cargo.toml                   | TOML     |         21 |          8 |          7 |         36 |
+| c:\Users\User\Downloads\life-viewer-workspace(1)\life-viewer-workspace\lif-viewer\src\app.rs                   | Rust     |        332 |         48 |         68 |        448 |
+| c:\Users\User\Downloads\life-viewer-workspace(1)\life-viewer-workspace\lif-viewer\src\lif_parser.rs            | Rust     |        263 |         46 |         31 |        340 |
+| c:\Users\User\Downloads\life-viewer-workspace(1)\life-viewer-workspace\lif-viewer\src\main.rs                  | Rust     |        111 |         47 |         31 |        189 |
+| c:\Users\User\Downloads\life-viewer-workspace(1)\life-viewer-workspace\lif-viewer\src\sidebar.rs               | Rust     |        136 |          7 |         30 |        173 |
+| Total                                                                                                          |          |      6,435 |        635 |        920 |      7,990 |
++----------------------------------------------------------------------------------------------------------------+----------+------------+------------+------------+------------+
