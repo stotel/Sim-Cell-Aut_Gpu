@@ -1,24 +1,9 @@
-// ── app.rs ────────────────────────────────────────────────────────────────────
-//
-// `AppState` owns every GPU and simulation object.
-//
-// On every `load_file` call:
-//   1. `lif_parser` extracts `declared_w/h` from the file header (`x =`, `y =`)
-//      and the `rule` string (`rule = B2/S`).
-//   2. The new grid is sized to  declared_w/h + padding  (or bounding-box +
-//      padding, whichever is larger).
-//   3. `parse_rule_string()` turns the rule into birth/survival digit sets.
-//   4. `build_rule_from_parsed()` compiles a fresh `RuleGraph` for those sets.
-//   5. `AutomataEngine` and `Renderer` are **fully rebuilt** with the new
-//      topology, schema, and compiled compute shader.
-
 use std::{path::Path, sync::Arc, time::{Duration, Instant}};
 
-use wgpu::util::DeviceExt;
 use winit::window::Window;
 
 use gpu_automata::{
-    NodeId,
+    NodeId, render::renderer::CameraUniforms, render::renderer::cell_ndc,
     automata::engine::{AutomataEngine, EngineConfig},
     cell::schema::CellSchema,
     render::renderer::Renderer,
@@ -31,17 +16,92 @@ use crate::{
     sidebar::UiState,
 };
 
-// ── Padding added around each newly-loaded pattern ───────────────────────────
+// ── Padding ───────────────────────────────────────────────────────────────────
 pub const PADDING_TOP: usize = 50;
 pub const PADDING_BOT: usize = 50;
-pub const PADDING_RGT: usize = 50;
 pub const PADDING_LFT: usize = 50;
-
-// ── Default grid before any file is loaded ────────────────────────────────────
+pub const PADDING_RGT: usize = 50;
 const DEFAULT_W: usize = 500;
 const DEFAULT_H: usize = 500;
 
-// ── FPS tracking ─────────────────────────────────────────────────────────────
+// ── Camera ────────────────────────────────────────────────────────────────────
+
+/// 2-D camera: pan + zoom.  Lives in CPU; converted to `CameraUniforms` each frame.
+struct Camera {
+    /// Zoom multiplier.  1.0 = fit the whole grid in the window.
+    zoom:  f32,
+    /// Camera centre in grid-cell units.
+    pan_x: f32,
+    pan_y: f32,
+}
+
+impl Camera {
+    fn new(grid_w: usize, grid_h: usize) -> Self {
+        Self {
+            zoom:  1.0,
+            pan_x: grid_w as f32 / 2.0,
+            pan_y: grid_h as f32 / 2.0,
+        }
+    }
+
+    /// Pixel size of one cell at the current zoom level.
+    fn cell_px(&self, grid_w: u32, grid_h: u32, win_w: u32, win_h: u32) -> f32 {
+        let base = (win_w as f32 / grid_w as f32).min(win_h as f32 / grid_h as f32);
+        self.zoom * base
+    }
+
+    /// Build the GPU uniform block for this camera state.
+    fn uniforms(&self, grid_w: u32, grid_h: u32, win_w: u32, win_h: u32) -> CameraUniforms {
+        let (cw, ch) = cell_ndc(grid_w, grid_h, win_w, win_h, self.zoom);
+        CameraUniforms {
+            cell_w: cw,
+            cell_h: ch,
+            cam_x:  self.pan_x,
+            cam_y:  self.pan_y,
+            grid_w,
+            grid_h,
+            _pad0:  0,
+            _pad1:  0,
+        }
+    }
+
+    /// Zoom toward/away from a screen point (px, py) in physical pixels,
+    /// top-left origin.  `delta` > 0 = zoom in.
+    fn zoom_toward(&mut self, delta: f32, px: f32, py: f32,
+                   grid_w: u32, grid_h: u32, win_w: u32, win_h: u32)
+    {
+        let old_px = self.cell_px(grid_w, grid_h, win_w, win_h);
+
+        // Clamp zoom to [0.05, 200]
+        self.zoom = (self.zoom * (1.0 + delta * 0.12)).clamp(0.05, 200.0);
+
+        let new_px = self.cell_px(grid_w, grid_h, win_w, win_h);
+
+        // World position under cursor (before zoom)
+        let cx = win_w as f32 / 2.0;
+        let cy = win_h as f32 / 2.0;
+        // NDC y is up, screen y is down → negate y component
+        let world_x = self.pan_x + (px - cx) / old_px;
+        let world_y = self.pan_y - (py - cy) / old_px;
+
+        // After zoom, keep that world point under the cursor
+        self.pan_x = world_x - (px - cx) / new_px;
+        self.pan_y = world_y + (py - cy) / new_px;
+    }
+
+    /// Pan by a screen-space delta (physical pixels).
+    fn pan_by(&mut self, dx: f32, dy: f32,
+              grid_w: u32, grid_h: u32, win_w: u32, win_h: u32)
+    {
+        let cpx = self.cell_px(grid_w, grid_h, win_w, win_h);
+        // screen x+ → grid x+, screen y+ (down) → grid y- (because NDC y is up)
+        self.pan_x -= dx / cpx;
+        self.pan_y += dy / cpx;
+    }
+}
+
+// ── FPS counter ───────────────────────────────────────────────────────────────
+
 struct FpsCounter {
     samples: std::collections::VecDeque<Instant>,
     window:  usize,
@@ -65,7 +125,6 @@ impl FpsCounter {
 // ── AppState ──────────────────────────────────────────────────────────────────
 
 pub struct AppState {
-    // ── Windowing / GPU ───────────────────────────────────────────────────
     pub window:       Arc<Window>,
     surface:          wgpu::Surface<'static>,
     device:           Arc<wgpu::Device>,
@@ -73,21 +132,22 @@ pub struct AppState {
     surface_config:   wgpu::SurfaceConfiguration,
     surface_format:   wgpu::TextureFormat,
 
-    // ── Simulation (both rebuilt on every file load) ──────────────────────
     engine:           AutomataEngine,
     cell_renderer:    Renderer,
-    /// Current simulation grid size (changes on file load).
     grid_w:           usize,
     grid_h:           usize,
-    /// Last successfully loaded pattern — used by Reset.
     last_pattern:     Option<LifPattern>,
 
-    // ── egui ─────────────────────────────────────────────────────────────
+    // Camera
+    camera:           Camera,
+    middle_down:      bool,
+    last_mouse:       Option<(f32, f32)>,   // physical pixels, last CursorMoved pos
+    pub mouse_pos:    (f32, f32),           // current cursor position
+
     egui_ctx:         egui::Context,
     egui_state:       egui_winit::State,
     egui_renderer:    egui_wgpu::Renderer,
 
-    // ── UI / timing ───────────────────────────────────────────────────────
     pub ui:           UiState,
     fps_counter:      FpsCounter,
     last_frame_start: Instant,
@@ -95,7 +155,6 @@ pub struct AppState {
 
 impl AppState {
     pub async fn new(window: Arc<Window>) -> anyhow::Result<Self> {
-        // ── Backend (DX12 first on Windows – avoids Vulkan semaphore spam) ─
         let backends = {
             #[cfg(target_os = "windows")]      { wgpu::Backends::DX12 | wgpu::Backends::VULKAN }
             #[cfg(target_os = "macos")]        { wgpu::Backends::METAL }
@@ -106,7 +165,7 @@ impl AppState {
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
             backends,
             flags: if cfg!(debug_assertions) { wgpu::InstanceFlags::DEBUG }
-                   else                      { wgpu::InstanceFlags::empty() },
+                   else { wgpu::InstanceFlags::empty() },
             ..Default::default()
         });
 
@@ -138,11 +197,9 @@ impl AppState {
         let device = Arc::new(device);
         let queue  = Arc::new(queue);
 
-        // ── Surface configuration ─────────────────────────────────────────
         let caps   = surface.get_capabilities(&adapter);
         let format = caps.formats.iter().find(|f| f.is_srgb()).copied()
                          .unwrap_or(caps.formats[0]);
-
         let present_mode = [wgpu::PresentMode::AutoVsync, wgpu::PresentMode::Fifo]
             .iter().find(|&&m| caps.present_modes.contains(&m))
             .copied().unwrap_or(wgpu::PresentMode::Fifo);
@@ -160,7 +217,6 @@ impl AppState {
         };
         surface.configure(&device, &surface_config);
 
-        // ── Initial simulation: GoL B3/S23, random soup ───────────────────
         let rule_graph = build_gol_rule();
         let schema     = gol_schema();
         let topology   = Box::new(SquareGrid2D::new(DEFAULT_W, DEFAULT_H));
@@ -177,7 +233,6 @@ impl AppState {
             DEFAULT_W as u32, DEFAULT_H as u32,
         );
 
-        // ── egui ──────────────────────────────────────────────────────────
         let egui_ctx = egui::Context::default();
         egui_ctx.set_visuals(egui::Visuals::dark());
 
@@ -199,6 +254,13 @@ impl AppState {
             ..Default::default()
         };
 
+        let camera = Camera::new(DEFAULT_W, DEFAULT_H);
+
+        // Push correct initial camera uniforms
+        let win = window.inner_size();
+        let init_cam = camera.uniforms(DEFAULT_W as u32, DEFAULT_H as u32, win.width.max(1), win.height.max(1));
+        cell_renderer.update_camera(&queue, &init_cam);
+
         Ok(Self {
             window,
             surface,
@@ -211,6 +273,10 @@ impl AppState {
             grid_w: DEFAULT_W,
             grid_h: DEFAULT_H,
             last_pattern: None,
+            camera,
+            middle_down: false,
+            last_mouse:  None,
+            mouse_pos:   (0.0, 0.0),
             egui_ctx,
             egui_state,
             egui_renderer,
@@ -223,7 +289,6 @@ impl AppState {
     // ── Per-frame ─────────────────────────────────────────────────────────────
 
     pub fn update_and_render(&mut self) {
-        // FPS limiting
         if self.ui.fps_limited {
             let target  = Duration::from_secs_f64(1.0 / self.ui.fps_limit.max(1.0));
             let elapsed = self.last_frame_start.elapsed();
@@ -232,7 +297,6 @@ impl AppState {
         self.last_frame_start = Instant::now();
         self.ui.fps = self.fps_counter.tick();
 
-        // One-shot UI requests
         if self.ui.open_file_requested {
             self.ui.open_file_requested = false;
             self.open_file_dialog();
@@ -242,7 +306,6 @@ impl AppState {
             self.reset_simulation();
         }
 
-        // Advance simulation
         let should_step = !self.ui.paused || self.ui.step_requested;
         self.ui.step_requested = false;
 
@@ -252,7 +315,14 @@ impl AppState {
             self.cell_renderer.update_cell_binding(&self.device, &self.engine);
         }
 
-        // Acquire swapchain image
+        // Upload camera uniforms every frame (cheap write_buffer)
+        let win = self.window.inner_size();
+        let cam_uni = self.camera.uniforms(
+            self.grid_w as u32, self.grid_h as u32,
+            win.width.max(1), win.height.max(1),
+        );
+        self.cell_renderer.update_camera(&self.queue, &cam_uni);
+
         let frame = match self.surface.get_current_texture() {
             Ok(f)  => f,
             Err(wgpu::SurfaceError::Outdated) => return,
@@ -264,17 +334,14 @@ impl AppState {
             &wgpu::CommandEncoderDescriptor { label: Some("frame_encoder") }
         );
 
-        // Pass 1: cell grid (clears background)
         self.cell_renderer.render(&mut encoder, &view);
-
-        // Pass 2: egui sidebar (LoadOp::Load – keeps cells underneath)
         self.render_egui(&mut encoder, &view);
 
         self.queue.submit(std::iter::once(encoder.finish()));
         frame.present();
     }
 
-    // ── Window events ─────────────────────────────────────────────────────────
+    // ── Window / mouse events ─────────────────────────────────────────────────
 
     pub fn on_window_event(&mut self, event: &winit::event::WindowEvent) -> bool {
         self.egui_state.on_window_event(&self.window, event).consumed
@@ -285,6 +352,73 @@ impl AppState {
         self.surface_config.width  = new_size.width;
         self.surface_config.height = new_size.height;
         self.surface.configure(&self.device, &self.surface_config);
+    }
+
+    /// Zoom toward the cursor with the mouse wheel.
+    /// `delta` is positive when scrolling toward the user (scroll down / zoom out
+    /// on most platforms); invert as needed.
+    pub fn on_scroll(&mut self, delta: f32) {
+        let win = self.window.inner_size();
+        let (mx, my) = self.mouse_pos;
+        self.camera.zoom_toward(
+            delta,
+            mx, my,
+            self.grid_w as u32, self.grid_h as u32,
+            win.width.max(1), win.height.max(1),
+        );
+    }
+
+    /// Called when middle mouse button is pressed/released.
+    pub fn on_middle_button(&mut self, pressed: bool) {
+        self.middle_down = pressed;
+        if pressed {
+            self.last_mouse = Some(self.mouse_pos);
+        } else {
+            self.last_mouse = None;
+        }
+    }
+
+    /// Called on every CursorMoved event.
+    pub fn on_cursor_moved(&mut self, x: f32, y: f32) {
+        self.mouse_pos = (x, y);
+
+        if self.middle_down {
+            if let Some((lx, ly)) = self.last_mouse {
+                let win = self.window.inner_size();
+                let dx  = x - lx;
+                let dy  = y - ly;
+                self.camera.pan_by(
+                    dx, dy,
+                    self.grid_w as u32, self.grid_h as u32,
+                    win.width.max(1), win.height.max(1),
+                );
+            }
+            self.last_mouse = Some((x, y));
+        }
+    }
+
+
+    /// Pan camera by (dx, dy) in grid-cell units.
+    /// +x = right, +y = up  (grid coordinate orientation).
+    /// Pan the camera by (dx, dy) in grid-cell units.
+    /// +dx = move viewport right (see higher columns).
+    /// +dy = move viewport up    (see higher rows — row 0 is at bottom in NDC).
+    pub fn camera_pan_grid(&mut self, dx: f32, dy: f32) {
+        self.camera.pan_x += dx;
+        self.camera.pan_y += dy;
+    }
+
+    /// Zoom in (delta > 0) or out (delta < 0) around the screen centre.
+    pub fn camera_zoom_center(&mut self, delta: f32) {
+        let win = self.window.inner_size();
+        let cx  = win.width  as f32 / 2.0;
+        let cy  = win.height as f32 / 2.0;
+        self.camera.zoom_toward(
+            delta,
+            cx, cy,
+            self.grid_w as u32, self.grid_h as u32,
+            win.width.max(1), win.height.max(1),
+        );
     }
 
     // ── File loading ──────────────────────────────────────────────────────────
@@ -299,7 +433,7 @@ impl AppState {
                 self.ui.file_name = path.file_name()
                     .and_then(|n| n.to_str()).unwrap_or("unknown").to_string();
                 log::info!(
-                    "Loaded {:?}: {} alive cells, grid {}×{}, rule {:?}",
+                    "Loaded {:?}: {} cells, grid {}×{}, rule {:?}",
                     path, alive, self.grid_w, self.grid_h, pat.rule
                 );
                 self.last_pattern = Some(pat);
@@ -320,25 +454,7 @@ impl AppState {
         if let Some(path) = result { self.load_file(&path); }
     }
 
-    // ── Core: apply_pattern ───────────────────────────────────────────────────
-    //
-    // This is the single place that handles everything when a new pattern
-    // is loaded or the simulation is reset:
-    //
-    //   1. Compute grid dimensions from the pattern's declared/computed bounds
-    //      plus the four padding constants.
-    //   2. Parse the rule string → build a new RuleGraph.
-    //   3. Tear down the old AutomataEngine and Renderer and create fresh ones
-    //      with the new topology, grid size, and compute shader.
-    //   4. Upload the centered (+ offset) pattern cells.
-    //
-    // `offset_x` / `offset_y` are extra pixel shifts after centering
-    // (positive = right / down).  Pass 0, 0 for pure centering.
-
     fn apply_pattern(&mut self, pat: &LifPattern, offset_x: i32, offset_y: i32) {
-        // ── 1. New grid dimensions ─────────────────────────────────────────
-        // Use the larger of the header-declared size and the alive-cell bbox,
-        // then add the four padding bands.
         let new_w = (pat.effective_w() as usize + PADDING_LFT + PADDING_RGT).max(1);
         let new_h = (pat.effective_h() as usize + PADDING_TOP + PADDING_BOT).max(1);
 
@@ -347,42 +463,29 @@ impl AppState {
         self.ui.grid_w = new_w;
         self.ui.grid_h = new_h;
 
-        // ── 2. Parse rule → new compute shader ────────────────────────────
         let parsed = lif_parser::parse_rule_string(&pat.rule);
-        log::info!(
-            "Rule {:?}  →  birth={:?}  survival={:?}",
-            parsed.raw, parsed.birth, parsed.survival
-        );
+        log::info!("Rule {:?} → birth={:?} survival={:?}", parsed.raw, parsed.birth, parsed.survival);
 
         let rule_graph = build_rule_from_parsed(&parsed);
-
-        // ── 3. Rebuild engine + renderer ──────────────────────────────────
-        let schema   = gol_schema();
-        let topology = Box::new(SquareGrid2D::new(new_w, new_h));
-        // Start with an empty (all-dead) buffer; cells are uploaded below.
-        let empty    = schema.zero_buffer(new_w * new_h);
+        let schema     = gol_schema();
+        let topology   = Box::new(SquareGrid2D::new(new_w, new_h));
+        let empty      = schema.zero_buffer(new_w * new_h);
 
         self.engine = AutomataEngine::new(
-            self.device.clone(),
-            self.queue.clone(),
-            topology,
-            schema,
-            &rule_graph,
-            empty,
+            self.device.clone(), self.queue.clone(),
+            topology, schema, &rule_graph, empty,
             EngineConfig::default(),
         );
 
         self.cell_renderer = Renderer::new(
-            &self.device,
-            &self.queue,
-            self.surface_format,
-            &self.engine,
-            "alive",
-            new_w as u32,
-            new_h as u32,
+            &self.device, &self.queue, self.surface_format,
+            &self.engine, "alive",
+            new_w as u32, new_h as u32,
         );
 
-        // ── 4. Upload pattern cells ───────────────────────────────────────
+        // Reset camera to fit the new grid
+        self.camera = Camera::new(new_w, new_h);
+
         let buf = lif_parser::pattern_to_grid(pat, new_w, new_h, offset_x, offset_y);
         self.engine.upload_cells(&buf);
         self.cell_renderer.update_cell_binding(&self.device, &self.engine);
@@ -396,10 +499,10 @@ impl AppState {
                 self.ui.step_count = 0;
             }
             None => {
-                // No file loaded – re-randomise in place.
                 let buf = random_soup(self.grid_w * self.grid_h, 0.30);
                 self.engine.upload_cells(&buf);
                 self.cell_renderer.update_cell_binding(&self.device, &self.engine);
+                self.camera = Camera::new(self.grid_w, self.grid_h);
                 self.engine.set_step_count(0);
                 self.ui.step_count = 0;
             }
@@ -431,10 +534,7 @@ impl AppState {
             size_in_pixels:   [self.surface_config.width, self.surface_config.height],
             pixels_per_point: ppp,
         };
-
-        self.egui_renderer.update_buffers(
-            &self.device, &self.queue, encoder, &clipped, &screen,
-        );
+        self.egui_renderer.update_buffers(&self.device, &self.queue, encoder, &clipped, &screen);
 
         {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -443,7 +543,7 @@ impl AppState {
                     view,
                     resolve_target: None,
                     ops: wgpu::Operations {
-                        load:  wgpu::LoadOp::Load, // keep cells underneath
+                        load:  wgpu::LoadOp::Load,
                         store: wgpu::StoreOp::Store,
                     },
                 })],
@@ -456,72 +556,46 @@ impl AppState {
     }
 }
 
-// ── Rule graph builders ───────────────────────────────────────────────────────
+// ── Rule builders ─────────────────────────────────────────────────────────────
 
-/// Build an arbitrary Life-like `RuleGraph` from a `ParsedRule`.
-///
-/// For each birth count b  → `sum == b`; OR all → `born_cond`.
-/// For each survival count s → `sum == s`; OR all → `survive_cond`.
-/// `select(is_alive, survive_cond, born_cond)` → cast_u32 → set_field.
 pub fn build_rule_from_parsed(rule: &ParsedRule) -> RuleGraph {
     let mut g    = RuleGraph::new();
-    let sum      = g.neighbor_sum("alive");       // f32
-
+    let sum      = g.neighbor_sum("alive");
     let born     = or_chain(&mut g, sum, &rule.birth);
     let survive  = or_chain(&mut g, sum, &rule.survival);
-
     let self_v   = g.self_field("alive", WgslType::U32);
     let zero     = g.const_u32(0);
     let is_alive = g.compare(self_v, zero, CompareOp::Ne);
-
-    // select(cond, if_true, if_false) — if alive: use survive, else: use born
-    let next   = g.select(is_alive, survive, born);
-    let next_u = g.cast_u32(next);
+    let next     = g.select(is_alive, survive, born);
+    let next_u   = g.cast_u32(next);
     g.set_field("alive", next_u);
     g
 }
 
-/// OR-chain: `sum == counts[0]  ||  sum == counts[1]  || …`
-/// Returns an always-false node when the list is empty.
 fn or_chain(g: &mut RuleGraph, sum: NodeId, counts: &[u32]) -> NodeId {
     if counts.is_empty() {
-        // 0.0 == 1.0  →  always false
-        let z = g.const_f32(0.0);
-        let o = g.const_f32(1.0);
+        let z = g.const_f32(0.0); let o = g.const_f32(1.0);
         return g.compare(z, o, CompareOp::Eq);
     }
     let mut acc: Option<NodeId> = None;
     for &n in counts {
         let c  = g.const_f32(n as f32);
         let eq = g.compare(sum, c, CompareOp::Eq);
-        acc = Some(match acc {
-            None    => eq,
-            Some(a) => g.or(a, eq),
-        });
+        acc = Some(match acc { None => eq, Some(a) => g.or(a, eq) });
     }
     acc.unwrap()
 }
 
 fn build_gol_rule() -> RuleGraph {
-    build_rule_from_parsed(&ParsedRule {
-        birth:    vec![3],
-        survival: vec![2, 3],
-        raw:      "B3/S23".into(),
-    })
+    build_rule_from_parsed(&ParsedRule { birth: vec![3], survival: vec![2, 3], raw: "B3/S23".into() })
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-fn gol_schema() -> CellSchema {
-    CellSchema::new().field_u32("alive")
-}
+fn gol_schema() -> CellSchema { CellSchema::new().field_u32("alive") }
 
 pub fn random_soup(cell_count: usize, density: f32) -> Vec<u8> {
     let mut state: u64 = 0xDEAD_BEEF_CAFE_1234;
     let mut rng = move || -> f32 {
-        state = state
-            .wrapping_mul(6_364_136_223_846_793_005)
-            .wrapping_add(1_442_695_040_888_963_407);
+        state = state.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(1_442_695_040_888_963_407);
         (state >> 33) as f32 / u32::MAX as f32
     };
     let mut buf = vec![0u8; cell_count * 4];

@@ -29,12 +29,12 @@ use crate::shader::templates::SPARSE_ACTIVATE_FN;
 
 /// Parameters needed to emit the compute shader.
 pub struct ShaderBuilder<'a> {
-    pub schema: &'a CellSchema,
-    pub neighbor_count: usize,
-    pub rule: &'a CompiledRule,
-    pub sparse: bool,
-    pub topology_name: &'a str,
-    pub cell_count: usize,
+    pub schema:          &'a CellSchema,
+    pub neighbor_count:  usize,
+    pub rule:            &'a CompiledRule,
+    pub sparse:          bool,
+    pub topology_name:   &'a str,
+    pub cell_count:      usize,
 }
 
 impl<'a> ShaderBuilder<'a> {
@@ -49,9 +49,9 @@ impl<'a> ShaderBuilder<'a> {
              // Cell count : {cc}\n\
              // Neighbors  : {nc}\n\
              // Sparse     : {sparse}\n\n",
-            topo = self.topology_name,
-            cc = self.cell_count,
-            nc = self.neighbor_count,
+            topo   = self.topology_name,
+            cc     = self.cell_count,
+            nc     = self.neighbor_count,
             sparse = self.sparse,
         ));
 
@@ -69,23 +69,13 @@ impl<'a> ShaderBuilder<'a> {
 
         // ── Storage bindings ──────────────────────────────────────────────
         src.push_str("// ── Storage bindings ────────────────────────────────────────────\n");
-        src.push_str(
-            "@group(0) @binding(0) var<storage, read>       cells_current:   array<Cell>;\n",
-        );
-        src.push_str(
-            "@group(0) @binding(1) var<storage, read_write> cells_next:      array<Cell>;\n",
-        );
-        src.push_str(
-            "@group(0) @binding(2) var<storage, read>       neighbor_table:  array<u32>;\n",
-        );
+        src.push_str("@group(0) @binding(0) var<storage, read>       cells_current:   array<Cell>;\n");
+        src.push_str("@group(0) @binding(1) var<storage, read_write> cells_next:      array<Cell>;\n");
+        src.push_str("@group(0) @binding(2) var<storage, read>       neighbor_table:  array<u32>;\n");
 
         if self.sparse {
-            src.push_str(
-                "@group(0) @binding(3) var<storage, read>         active_cells:      array<u32>;\n",
-            );
-            src.push_str(
-                "@group(0) @binding(4) var<storage, read_write>   next_active_cells: array<u32>;\n",
-            );
+            src.push_str("@group(0) @binding(3) var<storage, read>         active_cells:      array<u32>;\n");
+            src.push_str("@group(0) @binding(4) var<storage, read_write>   next_active_cells: array<u32>;\n");
             src.push_str("@group(0) @binding(5) var<storage, read_write>   next_active_count: array<atomic<u32>>;\n");
             src.push('\n');
             src.push_str(SPARSE_ACTIVATE_FN);
@@ -152,7 +142,10 @@ impl<'a> ShaderBuilder<'a> {
     /// The vertex shader uses `instance_index` as cell index and positions a
     /// unit quad at the appropriate grid location.  The fragment shader maps
     /// the field value (clamped to [0,1]) through a colour ramp.
-    pub fn build_render_shader(schema: &CellSchema, color_field: &str) -> String {
+    pub fn build_render_shader(
+        schema:       &CellSchema,
+        color_field:  &str,
+    ) -> String {
         use crate::shader::templates::{RENDER_FRAG, RENDER_VERT_PREAMBLE};
         // Note: grid_width/grid_height are passed to the shader at runtime
         // via the RenderUniforms uniform buffer, not baked into the WGSL source.
@@ -172,8 +165,6 @@ impl<'a> ShaderBuilder<'a> {
             "    @builtin(vertex_index)   vert_idx: u32,\n",
             "    @builtin(instance_index) inst_idx: u32,\n",
             ") -> VertexOutput {\n",
-            "    let gw: u32   = uniforms.grid_width;\n",
-            "    let gh: u32   = uniforms.grid_height;\n",
             "    let cell: Cell = cells[inst_idx];\n",
             "\n",
         ));
@@ -185,28 +176,37 @@ impl<'a> ShaderBuilder<'a> {
             _ => format!("f32(cell.{})", color_field),
         };
 
-        // Build vertex shader body with explicit newlines for clean WGSL.
-        // vert_idx is always 0..5 (we draw 6 vertices per instance) so
-        // indexing QUAD_VERTS with it is safe; the % 6u is belt-and-braces.
+        // Vertex shader body using CameraUniforms.
+        // cell_w / cell_h already encode zoom and aspect-ratio correction so
+        // every cell is square on screen regardless of window dimensions.
         src.push_str(&format!(
-            "    let cell_value: f32 = {field} * uniforms.field_scale;\n\
-             \n    // Map instance index to 2-D grid position\n\
-             \n    let cx: u32 = inst_idx % gw;\
-             \n    let cy: u32 = inst_idx / gw;\
-             \n    let cell_size_x: f32 = 2.0f / f32(gw);\
-             \n    let cell_size_y: f32 = 2.0f / f32(gh);\
-             \n    let center_x: f32 = -1.0f + (f32(cx) + 0.5f) * cell_size_x;\
-             \n    let center_y: f32 = -1.0f + (f32(cy) + 0.5f) * cell_size_y;\
-             \n    let quad: vec2<f32> = QUAD_VERTS[vert_idx % 6u];\
-             \n    let pos: vec2<f32> = vec2<f32>(\
-             \n        center_x + quad.x * cell_size_x,\
-             \n        center_y + quad.y * cell_size_y,\
-             \n    );\
-             \n    var out: VertexOutput;\
-             \n    out.position   = vec4<f32>(pos, 0.0f, 1.0f);\
-             \n    out.cell_value = cell_value;\
-             \n    return out;\
-             \n}}\n\n",
+            // Each cell is a unit quad scaled by cell_w × cell_h.
+            // Grid row 0 is at the bottom (standard math / NDC orientation).
+            "    let cell_value: f32 = {field};
+             
+             // Decode instance → 2-D grid position
+             let gw = camera.grid_w;
+             let cx = f32(inst_idx % gw);
+             let cy = f32(inst_idx / gw);
+             
+             // World offset from camera centre (in grid-cell units)
+             let wx = cx + 0.5 - camera.cam_x;
+             let wy = cy + 0.5 - camera.cam_y;
+             
+             // NDC position
+             let quad = QUAD_VERTS[vert_idx % 6u];
+             let pos  = vec2<f32>(
+                 wx * camera.cell_w + quad.x * camera.cell_w,
+                 wy * camera.cell_h + quad.y * camera.cell_h,
+             );
+             
+             var out: VertexOutput;
+             out.position   = vec4<f32>(pos, 0.0, 1.0);
+             out.cell_value = cell_value;
+             return out;
+             }}
+
+",
             field = field_expr,
         ));
 

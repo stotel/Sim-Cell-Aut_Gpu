@@ -139,14 +139,29 @@ pub fn build(ctx: &egui::Context, state: &mut UiState) {
 
             ui.add_space(8.0);
 
-            egui::CollapsingHeader::new("Shortcuts")
+            egui::CollapsingHeader::new("⌨  Shortcuts")
                 .default_open(false)
                 .show(ui, |ui| {
-                    ui.label("Space  – pause / play");
-                    ui.label("S       – single step");
-                    ui.label("R       – reset");
-                    ui.label("O       – open file");
-                    ui.label("Drag   – drop .lif file");
+                    for (key, desc) in &[
+                        ("Space",    "pause / play"),
+                        ("S",        "single step"),
+                        ("R",        "reset"),
+                        ("O",        "open file"),
+                        ("Arrows",   "pan camera"),
+                        ("+  /  -",  "zoom in / out"),
+                        ("Scroll",   "zoom to cursor"),
+                        ("Mid-drag", "pan camera"),
+                        ("Drop",     ".lif / .rle file"),
+                    ] {
+                        ui.horizontal(|ui| {
+                            ui.label(
+                                egui::RichText::new(*key)
+                                    .monospace()
+                                    .color(egui::Color32::YELLOW),
+                            );
+                            ui.label(*desc);
+                        });
+                    }
                 });
         });
 

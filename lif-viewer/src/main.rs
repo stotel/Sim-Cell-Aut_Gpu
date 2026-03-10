@@ -1,72 +1,51 @@
 // ── lif-viewer/src/main.rs ────────────────────────────────────────────────────
 //
-// Entry point for the Life pattern viewer.
-//
-// Architecture (winit 0.30)
-// ─────────────────────────
-//   `App` implements `ApplicationHandler`.
-//   All GPU state is initialised lazily inside `resumed()` using
-//   `pollster::block_on` so we never block the event loop at startup.
-//
-// Usage
-// ─────
-//   lif-viewer                        # random soup
-//   lif-viewer path/to/pattern.lif    # load a .lif file at startup
-//   lif-viewer path/to/pattern.cells  # or plaintext
-//   lif-viewer path/to/pattern.rle    # or RLE
-//
-//   Drag-and-drop a file onto the window at any time.
-//
-// Keyboard shortcuts
-// ──────────────────
-//   Space  – pause / play
-//   S      – single step (when paused)
-//   R      – reset to initial state
-//   O      – open file dialog
-//   Escape – quit
+// Mouse:    scroll = zoom toward cursor  |  middle-drag = pan
+// Keyboard: arrows = pan  |  +/= = zoom in  |  - = zoom out
+//           Space = pause  |  S = step  |  R = reset  |  O = open  |  Esc = quit
 
 mod app;
 mod lif_parser;
 mod sidebar;
 
-use std::{path::PathBuf, sync::Arc};
+use std::{collections::HashSet, path::PathBuf, sync::Arc};
 
 use winit::{
     application::ApplicationHandler,
     dpi::LogicalSize,
-    event::{ElementState, KeyEvent, WindowEvent},
+    event::{ElementState, KeyEvent, MouseButton, MouseScrollDelta, WindowEvent},
     event_loop::{ActiveEventLoop, ControlFlow, EventLoop},
     keyboard::{KeyCode, PhysicalKey},
     window::{Window, WindowId},
 };
 
 use app::AppState;
-
-// ── Application shell ─────────────────────────────────────────────────────────
+use sidebar::SIDEBAR_WIDTH;
 
 struct App {
-    /// GPU state – `None` before the first `resumed()` call.
-    state: Option<AppState>,
-    /// .lif file passed on the command line (loaded after GPU init).
+    state:        Option<AppState>,
     pending_file: Option<PathBuf>,
+    /// Keys currently held down — polled every frame for smooth camera movement.
+    held_keys:    HashSet<KeyCode>,
 }
 
 impl App {
     fn new(pending_file: Option<PathBuf>) -> Self {
-        Self {
-            state: None,
-            pending_file,
-        }
+        Self { state: None, pending_file, held_keys: HashSet::new() }
+    }
+
+    /// Returns true if the cursor is over the simulation viewport,
+    /// i.e. NOT over the egui sidebar.
+    fn over_viewport(state: &AppState) -> bool {
+        let scale  = state.window.scale_factor() as f32;
+        let sidebar_phys = SIDEBAR_WIDTH * scale; // logical → physical px
+        state.mouse_pos.0 > sidebar_phys
     }
 }
 
 impl ApplicationHandler for App {
-    // ── Lifecycle ─────────────────────────────────────────────────────────────
-
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-        if self.state.is_some() {
-            return;
-        } // already initialised
+        if self.state.is_some() { return; }
 
         let window = Arc::new(
             event_loop
@@ -75,14 +54,12 @@ impl ApplicationHandler for App {
                         .with_title("Life Viewer")
                         .with_inner_size(LogicalSize::new(1024u32, 768u32)),
                 )
-                .expect("failed to create window"),
+                .expect("window"),
         );
 
-        // Block here while wgpu initialises – happens only once at startup.
-        let mut state =
-            pollster::block_on(AppState::new(window)).expect("failed to initialise GPU");
+        let mut state = pollster::block_on(AppState::new(window))
+            .expect("GPU init failed");
 
-        // Load the file that was passed on the command line, if any.
         if let Some(path) = self.pending_file.take() {
             state.load_file(&path);
         }
@@ -90,85 +67,117 @@ impl ApplicationHandler for App {
         self.state = Some(state);
     }
 
-    fn suspended(&mut self, _event_loop: &ActiveEventLoop) {}
+    fn suspended(&mut self, _: &ActiveEventLoop) {}
 
-    // ── Per-frame ─────────────────────────────────────────────────────────────
+    /// Poll mode: fire every frame, apply held-key camera movement then redraw.
+    fn about_to_wait(&mut self, _: &ActiveEventLoop) {
+        let Some(state) = self.state.as_mut() else { return };
 
-    fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
-        // In Poll mode this fires continuously → drives the render loop.
-        if let Some(s) = &self.state {
-            s.window.request_redraw();
-        }
+        // Continuous camera movement from held arrow / zoom keys.
+        // Amount is in grid-cell units per frame (pan) or zoom factor per frame.
+        let pan_step  = 2.0_f32;   // grid cells per frame
+        let zoom_step = 0.05_f32;  // fractional zoom per frame
+
+        let mut dx = 0.0_f32;
+        let mut dy = 0.0_f32;
+        let mut dz = 0.0_f32;
+
+        if self.held_keys.contains(&KeyCode::ArrowLeft)  { dx -= pan_step; }
+        if self.held_keys.contains(&KeyCode::ArrowRight) { dx += pan_step; }
+        if self.held_keys.contains(&KeyCode::ArrowUp)    { dy += pan_step; }
+        if self.held_keys.contains(&KeyCode::ArrowDown)  { dy -= pan_step; }
+        if self.held_keys.contains(&KeyCode::Equal)
+        || self.held_keys.contains(&KeyCode::NumpadAdd)  { dz += zoom_step; }
+        if self.held_keys.contains(&KeyCode::Minus)
+        || self.held_keys.contains(&KeyCode::NumpadSubtract) { dz -= zoom_step; }
+
+        if dx != 0.0 || dy != 0.0 { state.camera_pan_grid(dx, dy); }
+        if dz != 0.0              { state.camera_zoom_center(dz); }
+
+        state.window.request_redraw();
     }
-
-    // ── Window events ─────────────────────────────────────────────────────────
 
     fn window_event(
         &mut self,
         event_loop: &ActiveEventLoop,
-        _window_id: WindowId,
-        event: WindowEvent,
+        _wid:       WindowId,
+        event:      WindowEvent,
     ) {
-        let Some(state) = self.state.as_mut() else {
-            return;
-        };
+        let Some(state) = self.state.as_mut() else { return };
 
-        // Feed every event to egui first; if it was consumed (e.g. click
-        // inside the sidebar) skip our own processing.
-        let consumed = state.on_window_event(&event);
+        // Always feed to egui so the sidebar stays interactive.
+        state.on_window_event(&event);
+        // NOTE: we do NOT use the `consumed` return value to gate camera input —
+        // egui marks scroll/click as consumed even over the transparent central
+        // panel.  Instead we use `over_viewport()` based on cursor position.
 
         match &event {
-            // ── Quit ──────────────────────────────────────────────────────
             WindowEvent::CloseRequested => event_loop.exit(),
-
-            // ── Resize ────────────────────────────────────────────────────
-            WindowEvent::Resized(size) => state.resize(*size),
-
-            // ── Render ────────────────────────────────────────────────────
+            WindowEvent::Resized(s)     => state.resize(*s),
             WindowEvent::RedrawRequested => state.update_and_render(),
+            WindowEvent::DroppedFile(path) => state.load_file(path),
 
-            // ── Drag-and-drop ─────────────────────────────────────────────
-            WindowEvent::DroppedFile(path) => {
-                state.load_file(path);
+            // ── Cursor tracking (always, so pan works immediately) ─────────
+            WindowEvent::CursorMoved { position, .. } => {
+                state.on_cursor_moved(position.x as f32, position.y as f32);
             }
 
-            // ── Keyboard (only when egui didn't consume) ──────────────────
-            WindowEvent::KeyboardInput {
-                event:
-                    KeyEvent {
-                        physical_key: PhysicalKey::Code(code),
-                        state: ElementState::Pressed,
-                        ..
-                    },
+            // ── Mouse wheel → zoom toward cursor ──────────────────────────
+            // Guard: only when cursor is over the viewport, not the sidebar.
+            WindowEvent::MouseWheel { delta, .. } if Self::over_viewport(state) => {
+                let lines = match delta {
+                    MouseScrollDelta::LineDelta(_, y)  => *y,
+                    MouseScrollDelta::PixelDelta(pos)  => pos.y as f32 / 40.0,
+                };
+                // scroll up (positive y on most platforms) = zoom in
+                state.on_scroll(lines);
+            }
+
+            // ── Middle mouse → pan drag ────────────────────────────────────
+            WindowEvent::MouseInput {
+                button: MouseButton::Middle,
+                state:  btn_state,
                 ..
-            } if !consumed => match code {
-                KeyCode::Escape => event_loop.exit(),
-                KeyCode::Space => {
-                    state.ui.paused = !state.ui.paused;
+            } => {
+                // Allow panning from anywhere (even over sidebar feels natural)
+                state.on_middle_button(*btn_state == ElementState::Pressed);
+            }
+
+            // ── Keyboard ──────────────────────────────────────────────────
+            WindowEvent::KeyboardInput {
+                event: KeyEvent {
+                    physical_key: PhysicalKey::Code(code),
+                    state:        key_state,
+                    ..
+                },
+                ..
+            } => {
+                // Track held keys (arrows, zoom) for smooth per-frame movement.
+                match key_state {
+                    ElementState::Pressed  => { self.held_keys.insert(*code); }
+                    ElementState::Released => { self.held_keys.remove(code); }
                 }
-                KeyCode::KeyS => {
-                    state.ui.step_requested = true;
+
+                // One-shot actions only on press.
+                if *key_state == ElementState::Pressed {
+                    match code {
+                        KeyCode::Escape => event_loop.exit(),
+                        KeyCode::Space  => { state.ui.paused = !state.ui.paused; }
+                        KeyCode::KeyS   => { state.ui.step_requested  = true; }
+                        KeyCode::KeyR   => { state.ui.reset_requested = true; }
+                        KeyCode::KeyO   => { state.ui.open_file_requested = true; }
+                        _ => {}
+                    }
                 }
-                KeyCode::KeyR => {
-                    state.ui.reset_requested = true;
-                }
-                KeyCode::KeyO => {
-                    state.ui.open_file_requested = true;
-                }
-                _ => {}
-            },
+            }
 
             _ => {}
         }
     }
 }
 
-// ── main ──────────────────────────────────────────────────────────────────────
-
 fn main() {
-    // Suppress Vulkan validation noise; users can override with RUST_LOG.
     if std::env::var("RUST_LOG").is_err() {
-        // Show our own logs at info level; silence wgpu_hal entirely.
         std::env::set_var(
             "RUST_LOG",
             "lif_viewer=info,gpu_automata=info,wgpu_core=warn,wgpu_hal=off",
@@ -176,13 +185,10 @@ fn main() {
     }
     env_logger::init();
 
-    // Optional: path to a .lif / .cells / .rle file.
     let pending_file = std::env::args().nth(1).map(PathBuf::from);
-
-    let event_loop = EventLoop::new().expect("failed to create event loop");
-    // Poll mode: `about_to_wait` fires continuously, driving our render loop.
+    let event_loop = EventLoop::new().expect("event loop");
     event_loop.set_control_flow(ControlFlow::Poll);
 
     let mut app = App::new(pending_file);
-    event_loop.run_app(&mut app).expect("event loop error");
+    event_loop.run_app(&mut app).expect("run");
 }
