@@ -1,14 +1,3 @@
-// ── topology/grid3d.rs ────────────────────────────────────────────────────────
-//
-// Axis-aligned 3-D cubic grid.
-//
-// Neighbourhoods
-// ──────────────
-//   Moore3D   – 26 surrounding voxels
-//   VonNeumann3D – 6 face-adjacent voxels
-//
-// cell_index = z * (width * height) + y * width + x
-
 use super::Topology;
 use crate::topology::grid2d::Wrapping;
 

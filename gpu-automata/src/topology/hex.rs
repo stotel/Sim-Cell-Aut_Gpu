@@ -1,17 +1,8 @@
-// ── topology/hex.rs ───────────────────────────────────────────────────────────
-//
-// Hexagonal grid using "offset coordinates" (odd-row shift, flat-top columns).
-//
-// Each cell has exactly 6 neighbours.  Boundary cells use `u32::MAX` sentinels
-// for absent slots when Wrapping::Clamp is chosen.
-//
-// Layout: row-major, cell_index = row * width + col.
-
 use super::Topology;
 use crate::topology::grid2d::Wrapping;
 
-/// Axial offset for each of the 6 hex directions in offset coordinates.
-/// These differ for even / odd rows (the "pointy-top" odd-row convention).
+//Axial offset for each of the 6 hex directions in offset coordinates.
+//These differ for even / odd rows (the "pointy-top" odd-row convention).
 const EVEN_ROW_OFFSETS: [(i32, i32); 6] = [(1, 0), (0, -1), (-1, -1), (-1, 0), (-1, 1), (0, 1)];
 const ODD_ROW_OFFSETS: [(i32, i32); 6] = [(1, 0), (1, -1), (0, -1), (-1, 0), (0, 1), (1, 1)];
 

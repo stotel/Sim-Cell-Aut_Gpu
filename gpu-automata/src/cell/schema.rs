@@ -1,10 +1,3 @@
-// ── cell/schema.rs ────────────────────────────────────────────────────────────
-//
-// `CellSchema` owns an ordered list of `FieldDef`s and knows how to produce:
-//   • The WGSL struct declaration.
-//   • The byte stride of one cell (used to size GPU buffers).
-//   • An initialiser (all-zeros) for a cell.
-
 use super::field::{FieldDef, FieldType};
 
 /// Defines the in-memory layout of a single cell, shared between CPU and GPU.
@@ -18,7 +11,7 @@ impl CellSchema {
         Self::default()
     }
 
-    /// Append a field.  Order determines the WGSL struct member order.
+    /// Append a field. Order determines the WGSL struct member order.
     pub fn add_field(mut self, field: FieldDef) -> Self {
         self.fields.push(field);
         self
@@ -39,7 +32,7 @@ impl CellSchema {
         &self.fields
     }
 
-    /// Byte stride of one cell (all fields are 4 bytes → simple multiply).
+    /// Byte stride of one cell (all fields are 4 bytes).
     pub fn cell_byte_size(&self) -> usize {
         self.fields.len() * 4
     }
@@ -55,14 +48,6 @@ impl CellSchema {
     }
 
     /// Generate the WGSL `struct Cell { … }` declaration.
-    ///
-    /// Example output for `alive: u32, energy: f32`:
-    /// ```wgsl
-    /// struct Cell {
-    ///     alive:  u32,
-    ///     energy: f32,
-    /// }
-    /// ```
     pub fn generate_wgsl_struct(&self) -> String {
         let mut s = String::from("struct Cell {\n");
         for f in &self.fields {
@@ -72,9 +57,7 @@ impl CellSchema {
         s
     }
 
-    /// Generate a WGSL expression that constructs a zero-initialised `Cell`.
-    ///
-    /// Example: `Cell(0u, 0.0, 0.0)`
+    /// Generate a WGSL zero-init expression, e.g. `Cell(0u, 0.0, 0.0)`.
     pub fn generate_wgsl_zero_init(&self) -> String {
         let inits: Vec<_> = self
             .fields

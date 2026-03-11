@@ -1,0 +1,17 @@
+x = 152, y = 71, rule = B2/S
+81bo$72bo5bo4bo6bo$17bo46bo5bo4bobbo4bo3bo4bo6bo$10bo4bo41bo4bo4bobbo
+4bo4bo6bo4bo3bo4bo5bo$12bobbo5bo37bobbo4bo5bo15bo6bo4bo3bo$6bo5bo40bo
+5bo5bo32bo6bo5bo$19boo$7boo9bo35boo53boo$9bo8bo6bo30bo51bo$bbo6bo6bo6b
+o25bo6bo51bo6bo$4bo6bo11bo27bo6bo47bo6bo$4bo16boo28bo61bo$5boo20bo24b
+oo57boo5bo$o19bo26bo$7bo17boo27bo55bo5boo$boo45boo65bo$115bo6bo$26boo
+85bo6bo$bboo17bo27boo69bo$8bo19bo26bo62boo5bo$bo20boo24bo$6boo16bo28b
+oo62bo5boo$5bo11bo6bo27bo69bo$5bo6bo6bo6bo25bo5bo63bo6bo$3bo6bo8bo30bo
+69bo6bo$10bo9boo34boo69bo$8boo45bo69boo5bo$16bo5bo32bo5bo$7bo5bobbo36b
+o70bo5boo$13bo4bo40boo68bo$11bo46bo70bo6bo$58bo5bo62bo6bo$56bo77bo$62b
+oo68boo$61bo77bo$61bo5bo63bo5bo$59bo77bo$65boo68boo$64bo77bo$64bo6bo
+62bo5bo$62bo6bo70bo$69bo68boo$67boo5bo70bo$137bo5bo$66bo5boo69bo$71bo
+69boo$71bo6bo69bo$69bo6bo63bo5bo$76bo69bo$74boo5bo62boo$150bo$73bo5boo
+62bo$78bo69boo$78bo6bo$76bo6bo$83bo65boo$81boo5bo55bo$151bo$80bo5boo
+57boo$85bo61bo$85bo6bo47bo6bo$83bo6bo51bo6bo$90bo51bo$88boo53boo$$87bo
+5bo6bo32bo5bo5bo$93bo3bo4bo6bo15bo5bo4bobbo$91bo5bo4bo3bo4bo6bo4bo4bo
+bbo4bo4bo$99bo6bo4bo3bo4bobbo4bo5bo$108bo6bo4bo5bo$117bo!

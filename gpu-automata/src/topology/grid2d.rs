@@ -1,17 +1,3 @@
-// ── topology/grid2d.rs ────────────────────────────────────────────────────────
-//
-// An axis-aligned 2-D rectangular grid.
-//
-// Neighbourhood options
-// ─────────────────────
-//   Moore        – 8 neighbours (include diagonals)
-//   VonNeumann   – 4 neighbours (cardinal directions only)
-//
-// Wrapping options
-// ────────────────
-//   Wrapping::Torus  – wrap on both axes
-//   Wrapping::Clamp  – boundary cells have absent (u32::MAX) slots
-
 use super::Topology;
 
 /// How the grid handles its boundary.
@@ -33,7 +19,6 @@ pub enum Neighborhood {
 }
 
 impl Neighborhood {
-    /// The (dx, dy) offsets for each neighbour slot.
     fn offsets(self) -> &'static [(i32, i32)] {
         match self {
             Neighborhood::Moore => &[

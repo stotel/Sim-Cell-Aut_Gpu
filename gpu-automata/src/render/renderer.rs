@@ -34,12 +34,12 @@ use crate::shader::builder::ShaderBuilder;
 pub struct CameraUniforms {
     pub cell_w: f32,
     pub cell_h: f32,
-    pub cam_x:  f32,
-    pub cam_y:  f32,
+    pub cam_x: f32,
+    pub cam_y: f32,
     pub grid_w: u32,
     pub grid_h: u32,
-    pub _pad0:  u32,
-    pub _pad1:  u32,
+    pub _pad0: u32,
+    pub _pad1: u32,
 }
 
 impl CameraUniforms {
@@ -50,8 +50,8 @@ impl CameraUniforms {
         Self {
             cell_w: cw,
             cell_h: ch,
-            cam_x:  grid_w as f32 / 2.0,
-            cam_y:  grid_h as f32 / 2.0,
+            cam_x: grid_w as f32 / 2.0,
+            cam_y: grid_h as f32 / 2.0,
             grid_w,
             grid_h,
             _pad0: 0,
@@ -65,36 +65,36 @@ impl CameraUniforms {
 pub fn cell_ndc(grid_w: u32, grid_h: u32, win_w: u32, win_h: u32, zoom: f32) -> (f32, f32) {
     let base_px = (win_w as f32 / grid_w as f32).min(win_h as f32 / grid_h as f32);
     let cell_px = zoom * base_px;
-    let cell_w  = 2.0 * cell_px / win_w  as f32;
-    let cell_h  = 2.0 * cell_px / win_h  as f32;
+    let cell_w = 2.0 * cell_px / win_w as f32;
+    let cell_h = 2.0 * cell_px / win_h as f32;
     (cell_w, cell_h)
 }
 
 // ── Renderer ──────────────────────────────────────────────────────────────────
 
 pub struct Renderer {
-    pipeline:    wgpu::RenderPipeline,
-    bind_group:  wgpu::BindGroup,
-    camera_buf:  wgpu::Buffer,
-    cell_count:  u32,
+    pipeline: wgpu::RenderPipeline,
+    bind_group: wgpu::BindGroup,
+    camera_buf: wgpu::Buffer,
+    cell_count: u32,
 }
 
 impl Renderer {
     pub fn new(
-        device:         &Arc<wgpu::Device>,
-        queue:          &Arc<wgpu::Queue>,
+        device: &Arc<wgpu::Device>,
+        queue: &Arc<wgpu::Queue>,
         surface_format: wgpu::TextureFormat,
-        engine:         &AutomataEngine,
-        color_field:    &str,
-        grid_w:         u32,
-        grid_h:         u32,
+        engine: &AutomataEngine,
+        color_field: &str,
+        grid_w: u32,
+        grid_h: u32,
     ) -> Self {
-        let schema     = engine.schema();
+        let schema = engine.schema();
         let cell_count = engine.cell_count() as u32;
 
-        let wgsl   = ShaderBuilder::build_render_shader(schema, color_field);
+        let wgsl = ShaderBuilder::build_render_shader(schema, color_field);
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label:  Some("render_shader"),
+            label: Some("render_shader"),
             source: wgpu::ShaderSource::Wgsl(wgsl.into()),
         });
 
@@ -102,51 +102,56 @@ impl Renderer {
         // Caller should call update_camera() after construction with real dims.
         let init_cam = CameraUniforms::fit(grid_w, grid_h, 1, 1);
         let camera_buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label:    Some("camera_uniforms"),
+            label: Some("camera_uniforms"),
             contents: bytemuck::bytes_of(&init_cam),
-            usage:    wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         });
 
         let bgl = Self::make_bgl(device);
         let bind_group = Self::make_bg(device, &bgl, engine.current_buf(), &camera_buf);
 
         let pl_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label:                Some("render_pl"),
-            bind_group_layouts:   &[&bgl],
+            label: Some("render_pl"),
+            bind_group_layouts: &[&bgl],
             push_constant_ranges: &[],
         });
 
         let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label:  Some("render_pipeline"),
+            label: Some("render_pipeline"),
             layout: Some(&pl_layout),
             vertex: wgpu::VertexState {
-                module:              &shader,
-                entry_point:         "vs_main",
-                buffers:             &[],
+                module: &shader,
+                entry_point: "vs_main",
+                buffers: &[],
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
             },
             fragment: Some(wgpu::FragmentState {
-                module:              &shader,
-                entry_point:         "fs_main",
-                targets:             &[Some(wgpu::ColorTargetState {
-                    format:     surface_format,
-                    blend:      Some(wgpu::BlendState::REPLACE),
+                module: &shader,
+                entry_point: "fs_main",
+                targets: &[Some(wgpu::ColorTargetState {
+                    format: surface_format,
+                    blend: Some(wgpu::BlendState::REPLACE),
                     write_mask: wgpu::ColorWrites::ALL,
                 })],
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
             }),
             primitive: wgpu::PrimitiveState {
-                topology:  wgpu::PrimitiveTopology::TriangleList,
+                topology: wgpu::PrimitiveTopology::TriangleList,
                 cull_mode: None,
                 ..Default::default()
             },
             depth_stencil: None,
-            multisample:   wgpu::MultisampleState::default(),
-            multiview:     None,
-            cache:         None,
+            multisample: wgpu::MultisampleState::default(),
+            multiview: None,
+            cache: None,
         });
 
-        Self { pipeline, bind_group, camera_buf, cell_count }
+        Self {
+            pipeline,
+            bind_group,
+            camera_buf,
+            cell_count,
+        }
     }
 
     // ── Update methods ────────────────────────────────────────────────────────
@@ -175,13 +180,18 @@ impl Renderer {
                 view,
                 resolve_target: None,
                 ops: wgpu::Operations {
-                    load:  wgpu::LoadOp::Clear(wgpu::Color { r: 0.05, g: 0.05, b: 0.05, a: 1.0 }),
+                    load: wgpu::LoadOp::Clear(wgpu::Color {
+                        r: 0.05,
+                        g: 0.05,
+                        b: 0.05,
+                        a: 1.0,
+                    }),
                     store: wgpu::StoreOp::Store,
                 },
             })],
             depth_stencil_attachment: None,
-            timestamp_writes:         None,
-            occlusion_query_set:      None,
+            timestamp_writes: None,
+            occlusion_query_set: None,
         });
         pass.set_pipeline(&self.pipeline);
         pass.set_bind_group(0, &self.bind_group, &[]);
@@ -192,25 +202,25 @@ impl Renderer {
 
     fn make_bgl(device: &Arc<wgpu::Device>) -> wgpu::BindGroupLayout {
         device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label:   Some("render_bgl"),
+            label: Some("render_bgl"),
             entries: &[
                 wgpu::BindGroupLayoutEntry {
-                    binding:    0,
+                    binding: 0,
                     visibility: wgpu::ShaderStages::VERTEX,
-                    ty:         wgpu::BindingType::Buffer {
-                        ty:                 wgpu::BufferBindingType::Storage { read_only: true },
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Storage { read_only: true },
                         has_dynamic_offset: false,
-                        min_binding_size:   None,
+                        min_binding_size: None,
                     },
                     count: None,
                 },
                 wgpu::BindGroupLayoutEntry {
-                    binding:    1,
+                    binding: 1,
                     visibility: wgpu::ShaderStages::VERTEX,
-                    ty:         wgpu::BindingType::Buffer {
-                        ty:                 wgpu::BufferBindingType::Uniform,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
                         has_dynamic_offset: false,
-                        min_binding_size:   None,
+                        min_binding_size: None,
                     },
                     count: None,
                 },
@@ -219,17 +229,23 @@ impl Renderer {
     }
 
     fn make_bg(
-        device:     &Arc<wgpu::Device>,
-        bgl:        &wgpu::BindGroupLayout,
-        cell_buf:   &wgpu::Buffer,
+        device: &Arc<wgpu::Device>,
+        bgl: &wgpu::BindGroupLayout,
+        cell_buf: &wgpu::Buffer,
         camera_buf: &wgpu::Buffer,
     ) -> wgpu::BindGroup {
         device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label:   Some("render_bg"),
-            layout:  bgl,
+            label: Some("render_bg"),
+            layout: bgl,
             entries: &[
-                wgpu::BindGroupEntry { binding: 0, resource: cell_buf.as_entire_binding() },
-                wgpu::BindGroupEntry { binding: 1, resource: camera_buf.as_entire_binding() },
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: cell_buf.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: camera_buf.as_entire_binding(),
+                },
             ],
         })
     }

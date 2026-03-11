@@ -1,0 +1,18 @@
+#Cc/4 diagonal spaceships.
+#CBy Artem Dergachev
+x = 83, y = 82, rule = B2/S
+43bo$14bo32bo$43bo$8bo5bo24bobobbo$8bobo4bo29bobo3bo$8boo6bo26bobo4bob
+oo$10boo5bo19bo5boboo3bobbo$12b4o27bo4boobboo$12bo24bo$12bo25bobbobo4b
+o3bo$5bo33bobbo7bo$9bobboo27bo$5bo4boo29bo6bo$6bo5bo28bobboo$8bobo31bo
+$43bo$44bobbo$42boo$41bobo$43bo15$45bo$8bo$45bo$8bo37bo3bo$9bo3bo33bo$
+10bo36bo$10bo34bo6bo$8bo6bo28bo3bo$7bo3bo25bo11bobboo$o11bobboo25bo3bo
+$5bo3bo27bo3boo4b3oboobo$o3boo4b3oboobo20bo7bo$bo7bo30bo5bobb4obbo$3bo
+5bobb4obbo22bo3boo7bo6bo$4bo3boo7bo25b3o6booboo$6b3o6booboo34bo6bo$17b
+o30bo5bo7bo$11bo5bo6bobo19bo3boboo9bobbo$9bo3boboo10bo22bobboobbo6bobo
+$13bobboo34bo4boboboobobobo$15bobboo8bo27bobo8bo$19bo5bo32bo9boo$18bob
+o5bobo30bo3bo$20bo5bo28bobo9b4obo$21b3obobo22bo7bo6bo3boo$21bo3bo34b3o
+6bo3bo$15bobo3bo28bo4bo13boo$18bobbo29bo3booboboo7bo3boo$19bo33bobb3o
+8b3obbo$20bo35boboo9bo$56bobbobbo5bo$57bobobbo5bo3bo4bo$68boobbo6bo$
+70boo3boo3bo$63bobobo4b4o$60boo5bo4bo4bo3bo$65bobo4bo3b3o$60bobbobo13b
+oo$70bobbo$74bo4bo$68boo6bobobbo$74bobbobobbo$71bo5bo$71bo6boobbo$$76b
+o$72bo$80bo!

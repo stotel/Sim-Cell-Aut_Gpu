@@ -1,6 +1,5 @@
 // Builds the egui left-panel sidebar every frame.
 
-/// Mutable UI state shared between the app and the sidebar builder.
 #[derive(Debug)]
 pub struct UiState {
     pub fps: f64,
@@ -9,11 +8,9 @@ pub struct UiState {
     pub grid_w: usize,
     pub grid_h: usize,
 
-
     pub paused: bool,
     pub fps_limited: bool,
     pub fps_limit: f64,
-
 
     pub open_file_requested: bool,
     pub reset_requested: bool,
@@ -38,7 +35,6 @@ impl Default for UiState {
     }
 }
 
-/// Width of the sidebar panel in logical pixels.
 pub const SIDEBAR_WIDTH: f32 = 220.0;
 
 //draw side panel
@@ -51,7 +47,6 @@ pub fn build(ctx: &egui::Context, state: &mut UiState) {
             ui.heading("Automata Viewer");
             ui.separator();
 
-            // ── File info ─────────────────────────────────────────────
             ui.label(
                 egui::RichText::new(&state.file_name)
                     .monospace()
@@ -83,11 +78,7 @@ pub fn build(ctx: &egui::Context, state: &mut UiState) {
 
             ui.separator();
 
-            let play_label = if state.paused {
-                "Play"
-            } else {
-                "Pause"
-            };
+            let play_label = if state.paused { "Play" } else { "Pause" };
             if ui
                 .add_sized([SIDEBAR_WIDTH - 16.0, 28.0], egui::Button::new(play_label))
                 .clicked()
@@ -111,10 +102,7 @@ pub fn build(ctx: &egui::Context, state: &mut UiState) {
             ui.add_space(4.0);
 
             if ui
-                .add_sized(
-                    [SIDEBAR_WIDTH - 16.0, 28.0],
-                    egui::Button::new("Open file"),
-                )
+                .add_sized([SIDEBAR_WIDTH - 16.0, 28.0], egui::Button::new("Open file"))
                 .clicked()
             {
                 state.open_file_requested = true;
@@ -143,15 +131,15 @@ pub fn build(ctx: &egui::Context, state: &mut UiState) {
                 .default_open(false)
                 .show(ui, |ui| {
                     for (key, desc) in &[
-                        ("Space",    "pause / play"),
-                        ("S",        "single step"),
-                        ("R",        "reset"),
-                        ("O",        "open file"),
-                        ("Arrows",   "pan camera"),
-                        ("+  /  -",  "zoom in / out"),
-                        ("Scroll",   "zoom to cursor"),
+                        ("Space", "pause / play"),
+                        ("S", "single step"),
+                        ("R", "reset"),
+                        ("O", "open file"),
+                        ("Arrows", "pan camera"),
+                        ("+  /  -", "zoom in / out"),
+                        ("Scroll", "zoom to cursor"),
                         ("Mid-drag", "pan camera"),
-                        ("Drop",     ".lif / .rle file"),
+                        ("Drop", ".lif / .rle file"),
                     ] {
                         ui.horizontal(|ui| {
                             ui.label(
@@ -165,16 +153,15 @@ pub fn build(ctx: &egui::Context, state: &mut UiState) {
                 });
         });
 
-
     egui::CentralPanel::default()
         .frame(egui::Frame::none())
         .show(ctx, |_ui| {});
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+//Helpers
 
 fn format_large(n: u64) -> String {
-    // Insert thin spaces as thousands separators.
+    //Insert thin spaces as thousands separators.
     let s = n.to_string();
     let mut out = String::with_capacity(s.len() + s.len() / 3);
     for (i, ch) in s.chars().rev().enumerate() {

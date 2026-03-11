@@ -1,24 +1,3 @@
-// ── automata/engine.rs ────────────────────────────────────────────────────────
-//
-// `AutomataEngine` is the primary public API surface.
-//
-// Construction
-// ────────────
-//   let engine = AutomataEngine::new(device, queue, topology, schema, rule_graph);
-//
-// Simulation
-// ──────────
-//   engine.step();          – one simulation tick
-//   engine.current_cells(); – download current cell data to the CPU (slow!)
-//
-// Resize
-// ──────
-//   engine.resize(new_topology);  – rebuild buffers for a new grid size
-//
-// The engine does NOT own the wgpu surface or the render loop.  The caller is
-// responsible for presenting frames; see `render/renderer.rs` for the display
-// side.
-
 use std::sync::Arc;
 
 use crate::automata::buffers::GpuBuffers;
@@ -30,11 +9,11 @@ use crate::shader::builder::ShaderBuilder;
 use crate::sparse::active_set::SparseActiveSet;
 use crate::topology::Topology;
 
-/// Configuration passed to `AutomataEngine::new`.
+///Configuration passed to `AutomataEngine::new`.
 pub struct EngineConfig {
-    /// Enable the sparse active-cell optimisation.
+    ///Enable the sparse active-cell optimisation.(todo)
     pub sparse: bool,
-    /// Initial active cells (ignored when `sparse = false`).
+    ///Initial active cells
     pub initial_active: Vec<u32>,
 }
 
@@ -47,7 +26,7 @@ impl Default for EngineConfig {
     }
 }
 
-/// The main simulation engine.
+///The main simulation state
 pub struct AutomataEngine {
     device: Arc<wgpu::Device>,
     queue: Arc<wgpu::Queue>,
@@ -62,15 +41,13 @@ pub struct AutomataEngine {
 
     cell_count: usize,
     step_count: u64,
-    /// Cached WGSL source (useful for debugging / hot-reload).
+    ///Cached WGSL source
     pub wgsl_src: String,
 }
 
 impl AutomataEngine {
-    /// Create a new engine.
-    ///
-    /// * `initial_cells` – raw bytes initialising `cells[0]`.  Must be exactly
-    ///   `schema.cell_byte_size() * topology.cell_count()` bytes.
+    /// Create a new engine. `initial_cells` must be exactly
+    /// `schema.cell_byte_size() * topology.cell_count()` bytes.
     pub fn new(
         device: Arc<wgpu::Device>,
         queue: Arc<wgpu::Queue>,
@@ -83,7 +60,6 @@ impl AutomataEngine {
         let cell_count = topology.cell_count();
         let neighbor_data = topology.generate_neighbor_table();
 
-        // ── Compile rule graph → WGSL ─────────────────────────────────────
         let compiled_rule = RuleCompiler::new(rule_graph).compile();
         let wgsl_src = ShaderBuilder {
             schema: &schema,
@@ -97,13 +73,11 @@ impl AutomataEngine {
 
         log::debug!("Generated compute shader:\n{}", &wgsl_src);
 
-        // ── GPU buffers ───────────────────────────────────────────────────
         let buffers = GpuBuffers::new(&device, &initial_cells, &neighbor_data);
 
-        // ── Optional sparse set ───────────────────────────────────────────
         let sparse = if config.sparse {
             let initial = if config.initial_active.is_empty() {
-                // Activate everything by default.
+                //Activate everything by default.
                 (0..cell_count as u32).collect::<Vec<_>>()
             } else {
                 config.initial_active.clone()
@@ -113,7 +87,6 @@ impl AutomataEngine {
             None
         };
 
-        // ── Compute pipeline ──────────────────────────────────────────────
         let pipeline = ComputePipelineSet::new(&device, &wgsl_src, &buffers, sparse.as_ref());
 
         Self {
@@ -130,9 +103,7 @@ impl AutomataEngine {
         }
     }
 
-    // ── Public API ────────────────────────────────────────────────────────
-
-    /// Advance the simulation by one step.
+    ///Advance the simulation by one step.
     pub fn step(&mut self) {
         let dispatch_count = if let Some(sp) = &self.sparse {
             ((sp.current_count + 255) / 256).max(1)
@@ -156,28 +127,24 @@ impl AutomataEngine {
             pass.dispatch_workgroups(dispatch_count, 1, 1);
         }
 
-        // Sparse: encode the count-readback and counter-clear commands.
         if let Some(sp) = &self.sparse {
             sp.encode_post_step(&mut encoder, &self.queue);
         }
 
         self.queue.submit(std::iter::once(encoder.finish()));
 
-        // Swap the double buffers.
         self.buffers.swap();
         self.step_count += 1;
     }
 
-    /// Swap buffers `n` times without blocking; useful for benchmarking.
+    ///Run `n` steps without blocking;
     pub fn step_n(&mut self, n: u32) {
         for _ in 0..n {
             self.step();
         }
     }
 
-    /// Rebuild buffers for a new topology.
-    ///
-    /// The cell schema stays the same; cells are zero-initialised.
+    ///Rebuild buffers for a new topology. Cells are zero-initialised.
     pub fn resize(&mut self, new_topology: Box<dyn Topology>) {
         let cell_count = new_topology.cell_count();
         let neighbor_data = new_topology.generate_neighbor_table();
@@ -187,12 +154,11 @@ impl AutomataEngine {
         self.cell_count = cell_count;
         self.topology = new_topology;
 
-        // Rebuild bind groups to point at the new buffers.
         self.pipeline
             .rebuild_bind_groups(&self.device, &self.buffers, self.sparse.as_ref());
     }
 
-    /// Upload a new initial state without changing the topology.
+    ///Upload a new initial state without changing the topology.
     pub fn upload_cells(&self, data: &[u8]) {
         assert_eq!(
             data.len(),
@@ -202,15 +168,11 @@ impl AutomataEngine {
         self.buffers.upload_cells(&self.queue, data);
     }
 
-    /// Download the current cell buffer to the CPU.
-    ///
-    /// ⚠️  This stalls the GPU pipeline and is **slow**.  Use for debugging or
-    /// saving state, not in hot render loops.
+    ///Download the current cell buffer to the CPU. Stalls the GPU
     pub fn current_cells(&self) -> Vec<u8> {
         let buf = self.buffers.current();
         let size = (self.schema.cell_byte_size() * self.cell_count) as u64;
 
-        // Create a staging buffer.
         let staging = self.device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("readback_staging"),
             size,
@@ -226,7 +188,7 @@ impl AutomataEngine {
         encoder.copy_buffer_to_buffer(buf, 0, &staging, 0, size);
         self.queue.submit(std::iter::once(encoder.finish()));
 
-        // Block until the GPU is done.
+        //Wait for the GPU to finish before reading
         let slice = staging.slice(..);
         let (tx, rx) = std::sync::mpsc::sync_channel(1);
         slice.map_async(wgpu::MapMode::Read, move |r| tx.send(r).unwrap());
@@ -239,15 +201,13 @@ impl AutomataEngine {
         data
     }
 
-    // ── Accessors ─────────────────────────────────────────────────────────
-
     pub fn cell_count(&self) -> usize {
         self.cell_count
     }
     pub fn get_step_count(&self) -> u64 {
         self.step_count
     }
-    pub fn set_step_count(&mut self,step:u64){
+    pub fn set_step_count(&mut self, step: u64) {
         self.step_count = step;
     }
     pub fn schema(&self) -> &CellSchema {

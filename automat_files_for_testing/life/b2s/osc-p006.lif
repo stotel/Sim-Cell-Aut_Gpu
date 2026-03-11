@@ -1,0 +1,5 @@
+#CPeriod 6 oscillator.
+#CBy Artem Dergachev
+x = 16, y = 15, rule = B2/S
+5bo5bo$4bo5bo$$7bo$obbobboo6bo$bobobobobboo3bo$5bo4bo$$5bo4bo$o3boobbo
+bobobo$bo6boobbobbo$8bo$$5bo5bo$4bo5bo!

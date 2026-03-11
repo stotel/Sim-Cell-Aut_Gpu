@@ -1,12 +1,7 @@
-// ── rule_graph/compiler.rs ────────────────────────────────────────────────────
+// Compiles a `RuleGraph` into a WGSL code
 //
-// Compiles a `RuleGraph` into a snippet of WGSL code suitable for inlining
-// inside the compute-shader entry point.
-//
-// Code generation strategy
-// ────────────────────────
-// 1. Walk nodes in their stored order (callers must build the graph in
-//    dependency-first order, which is natural when using the builder API).
+// Code generation
+// 1. Walk nodes in their stored order
 // 2. For every non-terminal node, emit:
 //       let var_<id>: <WgslType> = <expression>;
 // 3. For every `SetField` node, emit:
@@ -14,30 +9,26 @@
 //
 // The emitted snippet assumes these identifiers exist in the surrounding
 // shader:
-//   • `self_cell`       – the current cell (read from `cells_current`)
-//   • `result_cell`     – mutable copy that will be written to `cells_next`
-//   • `cell_index`      – `u32` global invocation index
-//   • `cells_current[]` – the current cell buffer
-//   • `neighbor_table[]`– the topology table
-//   • `NEIGHBOR_COUNT`  – the compile-time constant for neighbour count
+// `self_cell`       – current cell (read from `cells_current`)
+// `result_cell`     – mutable copy that will be written to `cells_next`
+// `cell_index`      – `u32` global invocation index
+// `cells_current[]` – the current cell buffer
+// `neighbor_table[]`– topology table
+// `NEIGHBOR_COUNT`  – compile-time constant for neighbour count
 
 use super::graph::RuleGraph;
 use super::node::{NodeId, NodeKind, WgslType};
 
-/// Output of the rule graph compiler.
+///Output of the rule graph compiler.
 pub struct CompiledRule {
-    /// WGSL statements ready to be pasted into the compute-shader body.
+    ///WGSL statements
     pub wgsl_body: String,
 }
 
-/// Format an f32 as an unambiguous WGSL float literal.
-///
-/// Rust's Display for f32 omits the decimal point for whole numbers
-/// (e.g. 2.0 → "2"), but WGSL requires a suffix or decimal to distinguish
-/// floats from integers.  We always append "f" (the f32 type suffix).
+/// Format an f32 as a WGSL float literal.
 fn format_f32(v: f32) -> String {
     if v.is_nan() {
-        // WGSL has no NaN literal; use a divide-by-zero trick
+        // WGSL has no NaN literal; use divide-by-zero
         "( 0.0f / 0.0f)".to_string()
     } else if v.is_infinite() {
         if v > 0.0 {
@@ -46,8 +37,7 @@ fn format_f32(v: f32) -> String {
             "(-1.0f / 0.0f)".to_string()
         }
     } else {
-        // Always include a decimal point so WGSL sees a float, then add "f".
-        let s = format!("{:?}", v); // Rust Debug always includes the decimal
+        let s = format!("{:?}", v);
         format!("{}f", s)
     }
 }
@@ -61,7 +51,7 @@ impl<'a> RuleCompiler<'a> {
         Self { graph }
     }
 
-    /// Compile the graph to a WGSL snippet.
+    ///Compile the graph to a WGSL snippet.
     pub fn compile(&self) -> CompiledRule {
         let mut out = String::new();
         out.push_str("    // ── Begin generated rule graph ────────────────────\n");
@@ -71,7 +61,7 @@ impl<'a> RuleCompiler<'a> {
             let var = Self::var(id);
 
             let line = match &node.kind {
-                // ── Literals ────────────────────────────────────────────────
+                //Literals
                 NodeKind::ConstantF32(v) => {
                     let lit = format_f32(*v);
                     format!("    let {var}: f32 = {lit};\n", var = var, lit = lit)
@@ -80,7 +70,7 @@ impl<'a> RuleCompiler<'a> {
                     format!("    let {var}: u32 = {v}u;\n", var = var, v = v)
                 }
 
-                // ── Arithmetic ──────────────────────────────────────────────
+                //Arithmetic
                 NodeKind::Add(a, b) => {
                     let ty = self.ty(node.output_type);
                     format!(
@@ -122,7 +112,7 @@ impl<'a> RuleCompiler<'a> {
                     )
                 }
 
-                // ── Logic ────────────────────────────────────────────────────
+                //Logic
                 NodeKind::Compare { lhs, rhs, op } => {
                     format!(
                         "    let {var}: bool = {lhs} {op} {rhs};\n",
@@ -161,7 +151,7 @@ impl<'a> RuleCompiler<'a> {
                     if_false,
                 } => {
                     let ty = self.ty(node.output_type);
-                    // WGSL `select(false_val, true_val, cond)`
+                    //WGSL `select(false_val, true_val, cond)`
                     format!(
                         "    let {var}: {ty} = select({f}, {t}, {c});\n",
                         var = var,
@@ -172,7 +162,7 @@ impl<'a> RuleCompiler<'a> {
                     )
                 }
 
-                // ── Cell accessors ──────────────────────────────────────────
+                //Cell accessors
                 NodeKind::SelfField { field_name } => {
                     let ty = self.ty(node.output_type);
                     format!(
@@ -184,7 +174,7 @@ impl<'a> RuleCompiler<'a> {
                 }
                 NodeKind::NeighborField { slot, field_name } => {
                     let ty = self.ty(node.output_type);
-                    // Guard against absent neighbours (u32::MAX sentinel)
+                    //Guard against absent neighbours
                     let mut s = String::new();
                     s.push_str(&format!(
                         "    var {var}: {ty} = {zero};\n",
@@ -206,11 +196,18 @@ impl<'a> RuleCompiler<'a> {
                 }
 
                 NodeKind::NeighborSum { field_name } => {
-                    // Emit a WGSL loop that sums the field over all valid neighbours.
+                    //Emit a WGSL loop that sums the field over all valid neighbours.
                     let acc = format!("_nb_sum_{i}", i = i);
                     let mut s = String::new();
                     s.push_str(&format!(
-                        "    var {acc}: f32 = 0.0;\n    for (var _ni_{i}: u32 = 0u; _ni_{i} < NEIGHBOR_COUNT; _ni_{i}++) {{\n        let _nidx_{i}: u32 = neighbor_table[cell_index * NEIGHBOR_COUNT + _ni_{i}];\n        if (_nidx_{i} != 0xFFFFFFFFu) {{\n            {acc} = {acc} + f32(cells_current[_nidx_{i}].{field});\n        }}\n    }}\n    let {var}: f32 = {acc};\n",
+                        "    var {acc}: f32 = 0.0;\n
+                             for (var _ni_{i}: u32 = 0u; _ni_{i} < NEIGHBOR_COUNT; _ni_{i}++) {{\n
+                                let _nidx_{i}: u32 = neighbor_table[cell_index * NEIGHBOR_COUNT + _ni_{i}];\n 
+                                if (_nidx_{i} != 0xFFFFFFFFu) {{\n
+                                    {acc} = {acc} + f32(cells_current[_nidx_{i}].{field});\n
+                                }}\n
+                             }}\n    
+                             let {var}: f32 = {acc};\n",
                         acc   = acc,
                         i     = i,
                         field = field_name,
@@ -219,7 +216,7 @@ impl<'a> RuleCompiler<'a> {
                     s
                 }
 
-                // ── Type casts ──────────────────────────────────────────────
+                //Type casts
                 NodeKind::CastF32(src) => {
                     format!(
                         "    let {var}: f32 = f32({src});\n",
@@ -235,7 +232,7 @@ impl<'a> RuleCompiler<'a> {
                     )
                 }
 
-                // ── Output ───────────────────────────────────────────────────
+                //Output
                 NodeKind::SetField { field_name, value } => {
                     format!(
                         "    result_cell.{field} = {val};\n",
@@ -252,7 +249,7 @@ impl<'a> RuleCompiler<'a> {
         CompiledRule { wgsl_body: out }
     }
 
-    // ── Helpers ───────────────────────────────────────────────────────────
+    //Helpers
 
     fn var(id: NodeId) -> String {
         format!("_r{}", id.0)

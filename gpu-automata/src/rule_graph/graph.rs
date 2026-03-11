@@ -1,33 +1,5 @@
-// ── rule_graph/graph.rs ───────────────────────────────────────────────────────
-//
-// `RuleGraph` is an arena-based directed-acyclic graph.
-//
-// Users build the graph by calling `add_node`, which returns a `NodeId`.  IDs
-// are then passed into subsequent `add_node` calls to express dependencies.
-// The compiler in `compiler.rs` is responsible for topological ordering and
-// WGSL emission.
-
 use super::node::{CompareOp, Node, NodeId, NodeKind, WgslType};
 
-/// A directed acyclic computation graph describing one simulation rule.
-///
-/// Typical construction pattern
-/// ────────────────────────────
-/// ```rust,ignore
-/// let mut g = RuleGraph::new();
-/// let alive  = g.self_field("alive");
-/// let sum    = g.neighbor_sum("alive");
-/// let two    = g.const_u32(2);
-/// let three  = g.const_u32(3);
-/// let eq2    = g.compare(sum, two,   CompareOp::Eq);
-/// let eq3    = g.compare(sum, three, CompareOp::Eq);
-/// let survive = g.or(eq2, eq3);
-/// let born    = g.compare(sum, three, CompareOp::Eq);
-/// let alive_f = g.cast_bool(alive);     // alive != 0
-/// let next    = g.select(alive_f, survive, born);
-/// let next_u  = g.cast_u32(next);
-/// g.set_field("alive", next_u);
-/// ```
 #[derive(Debug, Default)]
 pub struct RuleGraph {
     pub(crate) nodes: Vec<Node>,
@@ -38,7 +10,6 @@ impl RuleGraph {
         Self::default()
     }
 
-    // ── Internal helper ───────────────────────────────────────────────────
     fn push(&mut self, kind: NodeKind, ty: Option<WgslType>) -> NodeId {
         let id = NodeId(self.nodes.len());
         self.nodes.push(Node::new(kind, ty));
@@ -107,12 +78,7 @@ impl RuleGraph {
         )
     }
 
-    // ── Cell accessors ────────────────────────────────────────────────────
-
     /// Read a field from the current cell.
-    /// The output type is inferred from `field_type` (caller must ensure it
-    /// matches the schema; the compiler will emit a compile-time WGSL error if
-    /// not).
     pub fn self_field(&mut self, field_name: impl Into<String>, ty: WgslType) -> NodeId {
         self.push(
             NodeKind::SelfField {
@@ -158,10 +124,7 @@ impl RuleGraph {
         self.push(NodeKind::CastU32(src), Some(WgslType::U32))
     }
 
-    // ── Output ────────────────────────────────────────────────────────────
-
     /// Assign a computed value to a field in `result_cell`.
-    /// Returns the output `NodeId` (a terminal node with no output type).
     pub fn set_field(&mut self, field_name: impl Into<String>, value: NodeId) -> NodeId {
         self.push(
             NodeKind::SetField {

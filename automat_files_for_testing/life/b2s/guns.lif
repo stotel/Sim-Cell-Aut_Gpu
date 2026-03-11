@@ -1,0 +1,13 @@
+#CPeriod 4 photon guns.
+#CBy Artem Dergachev
+x = 42, y = 53, rule = B2/S
+16bobbo4bobbo$11bo23bo$10bob5obbo3boobbo6bo$10boo22b3o$10bo4bo7bo6boo
+bbo$35bo$11b3o6bobbobo4boo$18boo5bobo$4bo3bo3bo11bo4bo4bo3bo$3bo3bo3bo
+3bob5obo7bo3bo3bo$bobo3bo3bo3bob5obo7bo3bo3bo$o3bo3bo3bo11bo4bo4bo3bo$
+3o15boo5bobo$o10b3o6bobbobo4boo$bo33bo$10bo4bo7bo6boobbo$10boo22b3o$
+10bob5obbo3boobbo6bo$11bo23bo$16bobbo4bobbo12$18bo11bo$17bo13bo$11bo8b
+o7bo8bo$10bo8bo9bo8bo$$10bo27bo$11bobboo6bobobo6boobbo$19bobbobobobbo$
+21b3ob3o$4bo3bo3bo4bo5bobo5bo4bo3bo$3bo3bo3bo3bo17bo3bo3bo$bobo3bo3bo
+3bo17bo3bo3bo$o3bo3bo3bo4bo5bobo5bo4bo3bo$3o18b3ob3o$o18bobbobobobbo$b
+o9bobboo6bobobo6boobbo$10bo27bo$$10bo8bo9bo8bo$11bo8bo7bo8bo$17bo13bo$
+18bo11bo!

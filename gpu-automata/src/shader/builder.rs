@@ -29,12 +29,12 @@ use crate::shader::templates::SPARSE_ACTIVATE_FN;
 
 /// Parameters needed to emit the compute shader.
 pub struct ShaderBuilder<'a> {
-    pub schema:          &'a CellSchema,
-    pub neighbor_count:  usize,
-    pub rule:            &'a CompiledRule,
-    pub sparse:          bool,
-    pub topology_name:   &'a str,
-    pub cell_count:      usize,
+    pub schema: &'a CellSchema,
+    pub neighbor_count: usize,
+    pub rule: &'a CompiledRule,
+    pub sparse: bool,
+    pub topology_name: &'a str,
+    pub cell_count: usize,
 }
 
 impl<'a> ShaderBuilder<'a> {
@@ -49,9 +49,9 @@ impl<'a> ShaderBuilder<'a> {
              // Cell count : {cc}\n\
              // Neighbors  : {nc}\n\
              // Sparse     : {sparse}\n\n",
-            topo   = self.topology_name,
-            cc     = self.cell_count,
-            nc     = self.neighbor_count,
+            topo = self.topology_name,
+            cc = self.cell_count,
+            nc = self.neighbor_count,
             sparse = self.sparse,
         ));
 
@@ -69,13 +69,23 @@ impl<'a> ShaderBuilder<'a> {
 
         // ── Storage bindings ──────────────────────────────────────────────
         src.push_str("// ── Storage bindings ────────────────────────────────────────────\n");
-        src.push_str("@group(0) @binding(0) var<storage, read>       cells_current:   array<Cell>;\n");
-        src.push_str("@group(0) @binding(1) var<storage, read_write> cells_next:      array<Cell>;\n");
-        src.push_str("@group(0) @binding(2) var<storage, read>       neighbor_table:  array<u32>;\n");
+        src.push_str(
+            "@group(0) @binding(0) var<storage, read>       cells_current:   array<Cell>;\n",
+        );
+        src.push_str(
+            "@group(0) @binding(1) var<storage, read_write> cells_next:      array<Cell>;\n",
+        );
+        src.push_str(
+            "@group(0) @binding(2) var<storage, read>       neighbor_table:  array<u32>;\n",
+        );
 
         if self.sparse {
-            src.push_str("@group(0) @binding(3) var<storage, read>         active_cells:      array<u32>;\n");
-            src.push_str("@group(0) @binding(4) var<storage, read_write>   next_active_cells: array<u32>;\n");
+            src.push_str(
+                "@group(0) @binding(3) var<storage, read>         active_cells:      array<u32>;\n",
+            );
+            src.push_str(
+                "@group(0) @binding(4) var<storage, read_write>   next_active_cells: array<u32>;\n",
+            );
             src.push_str("@group(0) @binding(5) var<storage, read_write>   next_active_count: array<atomic<u32>>;\n");
             src.push('\n');
             src.push_str(SPARSE_ACTIVATE_FN);
@@ -142,10 +152,7 @@ impl<'a> ShaderBuilder<'a> {
     /// The vertex shader uses `instance_index` as cell index and positions a
     /// unit quad at the appropriate grid location.  The fragment shader maps
     /// the field value (clamped to [0,1]) through a colour ramp.
-    pub fn build_render_shader(
-        schema:       &CellSchema,
-        color_field:  &str,
-    ) -> String {
+    pub fn build_render_shader(schema: &CellSchema, color_field: &str) -> String {
         use crate::shader::templates::{RENDER_FRAG, RENDER_VERT_PREAMBLE};
         // Note: grid_width/grid_height are passed to the shader at runtime
         // via the RenderUniforms uniform buffer, not baked into the WGSL source.
