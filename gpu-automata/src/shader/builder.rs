@@ -240,6 +240,10 @@ impl<'a> ShaderBuilder<'a> {
         src.push('\n');
         src.push_str("@group(0) @binding(0) var<storage, read> cells: array<Cell>;\n");
         src.push_str(RENDER_VERT_PREAMBLE);
+        src.push_str(
+            "\nstruct RenderChunkUniform {\n    base_cell: u32,\n    _pad0: u32,\n    _pad1: u32,\n    _pad2: u32,\n}\n",
+        );
+        src.push_str("@group(0) @binding(2) var<uniform> render_chunk: RenderChunkUniform;\n");
         src.push('\n');
 
         // Vertex shader
@@ -269,9 +273,10 @@ impl<'a> ShaderBuilder<'a> {
             "    let cell_value: f32 = {field};
              
              // Decode instance → 2-D grid position
+             let global_idx: u32 = inst_idx + render_chunk.base_cell;
              let gw = camera.grid_w;
-             let cx = f32(inst_idx % gw);
-             let cy = f32(inst_idx / gw);
+             let cx = f32(global_idx % gw);
+             let cy = f32(global_idx / gw);
              
              // World offset from camera centre (in grid-cell units)
              let wx = cx + 0.5 - camera.cam_x;

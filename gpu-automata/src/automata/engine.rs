@@ -24,6 +24,13 @@ pub struct ChunkParams {
     pub _pad: u32,
 }
 
+/// Per-chunk view used by the renderer when full composite rendering is unavailable.
+pub struct RenderChunkView<'a> {
+    pub cells: &'a wgpu::Buffer,
+    pub base_cell: u32,
+    pub cell_count: u32,
+}
+
 /// GPU resources for a single horizontal strip.
 struct GpuChunk {
     cells: [wgpu::Buffer; 2],
@@ -43,6 +50,8 @@ struct GpuChunkedState {
     pipeline: ChunkedPipeline,
     /// Composite buffer: all chunks' cells concatenated for rendering.
     render_buf: wgpu::Buffer,
+    /// False when the full grid exceeds `max_buffer_size`.
+    render_enabled: bool,
 }
 
 // ───────────────────────────────────────────────────────────────────────────────
@@ -147,7 +156,10 @@ impl AutomataEngine {
             }
             .build();
 
-            let buffers = GpuBuffers::new(&device, &initial_cells, &neighbor_data);
+            // In chunked mode, avoid allocating full-grid standard buffers.
+            let placeholder_cells = [0u8; 4];
+            let placeholder_neighbors = [0u32; 1];
+            let buffers = GpuBuffers::new(&device, &placeholder_cells, &placeholder_neighbors);
             let pipeline =
                 ComputePipelineSet::new(&device, &standard_wgsl, &buffers, None, true);
 
@@ -155,8 +167,10 @@ impl AutomataEngine {
                 &device, &topology, &schema, &chunked_wgsl, &initial_cells,
             );
 
-            // Seed the composite render buffer.
-            queue.write_buffer(&gpu_chunked.render_buf, 0, &initial_cells);
+            // Seed the composite render buffer only if it exists at full size.
+            if gpu_chunked.render_enabled {
+                queue.write_buffer(&gpu_chunked.render_buf, 0, &initial_cells);
+            }
 
             return Self {
                 device,
@@ -242,12 +256,34 @@ impl AutomataEngine {
         let chunk_count = topology.chunk_count();
         let pipeline = ChunkedPipeline::new(device, chunked_wgsl);
 
-        let render_buf = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("chunked_render_buf"),
-            size: initial_cells.len() as u64,
-            usage: Bu::STORAGE | Bu::COPY_SRC | Bu::COPY_DST,
-            mapped_at_creation: false,
-        });
+        let total_render_bytes = initial_cells.len() as u64;
+        let max_buffer_size = device.limits().max_buffer_size;
+        let (render_buf, render_enabled) = if total_render_bytes <= max_buffer_size {
+            (
+                device.create_buffer(&wgpu::BufferDescriptor {
+                    label: Some("chunked_render_buf"),
+                    size: total_render_bytes,
+                    usage: Bu::STORAGE | Bu::COPY_SRC | Bu::COPY_DST,
+                    mapped_at_creation: false,
+                }),
+                true,
+            )
+        } else {
+            log::warn!(
+                "Chunked render buffer disabled: required {} bytes, max_buffer_size {} bytes",
+                total_render_bytes,
+                max_buffer_size
+            );
+            (
+                device.create_buffer(&wgpu::BufferDescriptor {
+                    label: Some("chunked_render_buf_placeholder"),
+                    size: 4,
+                    usage: Bu::STORAGE | Bu::COPY_SRC | Bu::COPY_DST,
+                    mapped_at_creation: false,
+                }),
+                false,
+            )
+        };
 
         let cell_usage = Bu::STORAGE | Bu::COPY_SRC | Bu::COPY_DST;
         let mut chunks = Vec::with_capacity(chunk_count);
@@ -324,6 +360,7 @@ impl AutomataEngine {
             chunks,
             pipeline,
             render_buf,
+            render_enabled,
         }
     }
 
@@ -431,16 +468,18 @@ impl AutomataEngine {
         }
 
         // Phase 3: copy results to composite render buffer
-        for chunk in &state.chunks {
-            let next_buf = &chunk.cells[1 - chunk.front];
-            let own_bytes = chunk.own_count as u64 * cell_byte_size as u64;
-            encoder.copy_buffer_to_buffer(
-                next_buf,
-                0,
-                &state.render_buf,
-                chunk.render_offset,
-                own_bytes,
-            );
+        if state.render_enabled {
+            for chunk in &state.chunks {
+                let next_buf = &chunk.cells[1 - chunk.front];
+                let own_bytes = chunk.own_count as u64 * cell_byte_size as u64;
+                encoder.copy_buffer_to_buffer(
+                    next_buf,
+                    0,
+                    &state.render_buf,
+                    chunk.render_offset,
+                    own_bytes,
+                );
+            }
         }
 
         self.queue.submit(std::iter::once(encoder.finish()));
@@ -493,7 +532,9 @@ impl AutomataEngine {
                 self.queue
                     .write_buffer(&chunk.cells[chunk.front], 0, &data[start..end]);
             }
-            self.queue.write_buffer(&state.render_buf, 0, data);
+            if state.render_enabled {
+                self.queue.write_buffer(&state.render_buf, 0, data);
+            }
         } else {
             self.buffers.upload_cells(&self.queue, data);
         }
@@ -501,6 +542,56 @@ impl AutomataEngine {
 
     ///Download the current cell buffer to the CPU. Stalls the GPU
     pub fn current_cells(&self) -> Vec<u8> {
+        if let Some(ref state) = self.gpu_chunked {
+            if !state.render_enabled {
+                let total_size = self.schema.cell_byte_size() * self.cell_count;
+                let mut out = vec![0u8; total_size];
+                let cbs = self.schema.cell_byte_size();
+
+                for chunk in &state.chunks {
+                    let own_bytes = chunk.own_count as usize * cbs;
+                    if own_bytes == 0 {
+                        continue;
+                    }
+
+                    let staging = self.device.create_buffer(&wgpu::BufferDescriptor {
+                        label: Some("chunk_readback_staging"),
+                        size: own_bytes as u64,
+                        usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
+                        mapped_at_creation: false,
+                    });
+
+                    let mut encoder = self
+                        .device
+                        .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                            label: Some("chunk_readback_encoder"),
+                        });
+                    encoder.copy_buffer_to_buffer(
+                        &chunk.cells[chunk.front],
+                        0,
+                        &staging,
+                        0,
+                        own_bytes as u64,
+                    );
+                    self.queue.submit(std::iter::once(encoder.finish()));
+
+                    let slice = staging.slice(..);
+                    let (tx, rx) = std::sync::mpsc::sync_channel(1);
+                    slice.map_async(wgpu::MapMode::Read, move |r| tx.send(r).unwrap());
+                    self.device.poll(wgpu::Maintain::Wait);
+                    rx.recv().unwrap().expect("chunk buffer map failed");
+
+                    let mapped = slice.get_mapped_range();
+                    let start = chunk.render_offset as usize;
+                    out[start..start + own_bytes].copy_from_slice(&mapped);
+                    drop(mapped);
+                    staging.unmap();
+                }
+
+                return out;
+            }
+        }
+
         let buf = self.current_buf();
         let size = (self.schema.cell_byte_size() * self.cell_count) as u64;
 
@@ -556,6 +647,36 @@ impl AutomataEngine {
             self.buffers.current()
         }
     }
+
+    /// Returns true when rendering must be done chunk-by-chunk.
+    pub fn uses_chunked_render(&self) -> bool {
+        self.gpu_chunked
+            .as_ref()
+            .map(|s| !s.render_enabled)
+            .unwrap_or(false)
+    }
+
+    /// Returns per-chunk cell buffers and global offsets for chunked rendering.
+    pub fn render_chunk_views(&self) -> Option<Vec<RenderChunkView<'_>>> {
+        let state = self.gpu_chunked.as_ref()?;
+        if state.render_enabled {
+            return None;
+        }
+
+        let cbs = self.schema.cell_byte_size() as u64;
+        Some(
+            state
+                .chunks
+                .iter()
+                .map(|chunk| RenderChunkView {
+                    cells: &chunk.cells[chunk.front],
+                    base_cell: (chunk.render_offset / cbs) as u32,
+                    cell_count: chunk.own_count,
+                })
+                .collect(),
+        )
+    }
+
     pub fn topology(&self) -> &dyn Topology {
         self.topology.as_ref()
     }

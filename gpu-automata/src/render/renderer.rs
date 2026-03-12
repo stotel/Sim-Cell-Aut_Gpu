@@ -74,8 +74,16 @@ pub fn cell_ndc(grid_w: u32, grid_h: u32, win_w: u32, win_h: u32, zoom: f32) -> 
 
 pub struct Renderer {
     pipeline: wgpu::RenderPipeline,
-    bind_group: wgpu::BindGroup,
+    single_bind_group: Option<wgpu::BindGroup>,
+    chunk_draws: Vec<ChunkRenderDraw>,
+    chunk_uniform_bufs: Vec<wgpu::Buffer>,
+    single_chunk_uniform: wgpu::Buffer,
     camera_buf: wgpu::Buffer,
+    cell_count: u32,
+}
+
+struct ChunkRenderDraw {
+    bind_group: wgpu::BindGroup,
     cell_count: u32,
 }
 
@@ -108,7 +116,14 @@ impl Renderer {
         });
 
         let bgl = Self::make_bgl(device);
-        let bind_group = Self::make_bg(device, &bgl, engine.current_buf(), &camera_buf);
+        let single_chunk_uniform = Self::make_chunk_uniform_buf(device, 0);
+        let bind_group = Self::make_bg(
+            device,
+            &bgl,
+            engine.current_buf(),
+            &camera_buf,
+            &single_chunk_uniform,
+        );
 
         let pl_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("render_pl"),
@@ -148,7 +163,10 @@ impl Renderer {
 
         Self {
             pipeline,
-            bind_group,
+            single_bind_group: Some(bind_group),
+            chunk_draws: Vec::new(),
+            chunk_uniform_bufs: Vec::new(),
+            single_chunk_uniform,
             camera_buf,
             cell_count,
         }
@@ -164,7 +182,39 @@ impl Renderer {
     /// Rebuild the bind group after a buffer swap (call after every engine.step()).
     pub fn update_cell_binding(&mut self, device: &Arc<wgpu::Device>, engine: &AutomataEngine) {
         let bgl = self.pipeline.get_bind_group_layout(0);
-        self.bind_group = Self::make_bg(device, &bgl, engine.current_buf(), &self.camera_buf);
+        if engine.uses_chunked_render() {
+            self.single_bind_group = None;
+            self.chunk_draws.clear();
+            self.chunk_uniform_bufs.clear();
+
+            if let Some(chunks) = engine.render_chunk_views() {
+                for chunk in chunks {
+                    let chunk_uniform = Self::make_chunk_uniform_buf(device, chunk.base_cell);
+                    let bg = Self::make_bg(
+                        device,
+                        &bgl,
+                        chunk.cells,
+                        &self.camera_buf,
+                        &chunk_uniform,
+                    );
+                    self.chunk_uniform_bufs.push(chunk_uniform);
+                    self.chunk_draws.push(ChunkRenderDraw {
+                        bind_group: bg,
+                        cell_count: chunk.cell_count,
+                    });
+                }
+            }
+        } else {
+            self.chunk_draws.clear();
+            self.chunk_uniform_bufs.clear();
+            self.single_bind_group = Some(Self::make_bg(
+                device,
+                &bgl,
+                engine.current_buf(),
+                &self.camera_buf,
+                &self.single_chunk_uniform,
+            ));
+        }
         self.cell_count = engine.cell_count() as u32;
     }
 
@@ -194,8 +244,15 @@ impl Renderer {
             occlusion_query_set: None,
         });
         pass.set_pipeline(&self.pipeline);
-        pass.set_bind_group(0, &self.bind_group, &[]);
-        pass.draw(0..6, 0..self.cell_count);
+        if let Some(bg) = &self.single_bind_group {
+            pass.set_bind_group(0, bg, &[]);
+            pass.draw(0..6, 0..self.cell_count);
+        } else {
+            for draw in &self.chunk_draws {
+                pass.set_bind_group(0, &draw.bind_group, &[]);
+                pass.draw(0..6, 0..draw.cell_count);
+            }
+        }
     }
 
     // ── Private helpers ───────────────────────────────────────────────────────
@@ -224,7 +281,41 @@ impl Renderer {
                     },
                     count: None,
                 },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 2,
+                    visibility: wgpu::ShaderStages::VERTEX,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                },
             ],
+        })
+    }
+
+    fn make_chunk_uniform_buf(device: &Arc<wgpu::Device>, base_cell: u32) -> wgpu::Buffer {
+        #[repr(C)]
+        #[derive(Clone, Copy, Pod, Zeroable)]
+        struct RenderChunkUniform {
+            base_cell: u32,
+            _pad0: u32,
+            _pad1: u32,
+            _pad2: u32,
+        }
+
+        let uni = RenderChunkUniform {
+            base_cell,
+            _pad0: 0,
+            _pad1: 0,
+            _pad2: 0,
+        };
+
+        device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("render_chunk_uniform"),
+            contents: bytemuck::bytes_of(&uni),
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         })
     }
 
@@ -233,6 +324,7 @@ impl Renderer {
         bgl: &wgpu::BindGroupLayout,
         cell_buf: &wgpu::Buffer,
         camera_buf: &wgpu::Buffer,
+        chunk_uniform_buf: &wgpu::Buffer,
     ) -> wgpu::BindGroup {
         device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("render_bg"),
@@ -245,6 +337,10 @@ impl Renderer {
                 wgpu::BindGroupEntry {
                     binding: 1,
                     resource: camera_buf.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: chunk_uniform_buf.as_entire_binding(),
                 },
             ],
         })

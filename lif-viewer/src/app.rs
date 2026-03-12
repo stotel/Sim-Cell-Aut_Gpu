@@ -25,10 +25,10 @@ use crate::{
     sidebar::UiState,
 };
 
-pub const PADDING_TOP: usize = 200;
-pub const PADDING_BOT: usize = 200;
-pub const PADDING_LFT: usize = 200;
-pub const PADDING_RGT: usize = 200;
+pub const PADDING_TOP: usize = 0;
+pub const PADDING_BOT: usize = 0;
+pub const PADDING_LFT: usize = 0;
+pub const PADDING_RGT: usize = 0;
 const DEFAULT_W: usize = 10000;
 const DEFAULT_H: usize = 10000;
 
