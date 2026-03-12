@@ -29,8 +29,8 @@ pub const PADDING_TOP: usize = 200;
 pub const PADDING_BOT: usize = 200;
 pub const PADDING_LFT: usize = 200;
 pub const PADDING_RGT: usize = 200;
-const DEFAULT_W: usize = 500;
-const DEFAULT_H: usize = 500;
+const DEFAULT_W: usize = 10000;
+const DEFAULT_H: usize = 10000;
 
 // ── Camera ────────────────────────────────────────────────────────────────────
 

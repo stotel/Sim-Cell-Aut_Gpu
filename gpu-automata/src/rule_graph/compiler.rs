@@ -12,8 +12,8 @@
 // `self_cell`       – current cell (read from `cells_current`)
 // `result_cell`     – mutable copy that will be written to `cells_next`
 // `cell_index`      – `u32` global invocation index
-// `cells_current[]` – the current cell buffer
-// `neighbor_table[]`– topology table
+// `read_cell(idx)`  – reads a cell (dispatches to own cells or boundary)
+// `get_neighbor(cell_index, slot)` – returns neighbour cell index
 // `NEIGHBOR_COUNT`  – compile-time constant for neighbour count
 
 use super::graph::RuleGraph;
@@ -186,7 +186,7 @@ impl<'a> RuleCompiler<'a> {
                         }
                     ));
                     s.push_str(&format!(
-                        "    {{\n        let _nb_idx_{i}: u32 = neighbor_table[cell_index * NEIGHBOR_COUNT + {slot}u];\n        if (_nb_idx_{i} != 0xFFFFFFFFu) {{ {var} = cells_current[_nb_idx_{i}].{field}; }}\n    }}\n",
+                        "    {{\n        let _nb_idx_{i}: u32 = get_neighbor(cell_index, {slot}u);\n        if (_nb_idx_{i} != 0xFFFFFFFFu) {{ {var} = read_cell(_nb_idx_{i}).{field}; }}\n    }}\n",
                         i    = i,
                         slot = slot,
                         var  = var,
@@ -202,9 +202,9 @@ impl<'a> RuleCompiler<'a> {
                     s.push_str(&format!(
                         "    var {acc}: f32 = 0.0;\n
                              for (var _ni_{i}: u32 = 0u; _ni_{i} < NEIGHBOR_COUNT; _ni_{i}++) {{\n
-                                let _nidx_{i}: u32 = neighbor_table[cell_index * NEIGHBOR_COUNT + _ni_{i}];\n 
+                                let _nidx_{i}: u32 = get_neighbor(cell_index, _ni_{i});\n 
                                 if (_nidx_{i} != 0xFFFFFFFFu) {{\n
-                                    {acc} = {acc} + f32(cells_current[_nidx_{i}].{field});\n
+                                    {acc} = {acc} + f32(read_cell(_nidx_{i}).{field});\n
                                 }}\n
                              }}\n    
                              let {var}: f32 = {acc};\n",

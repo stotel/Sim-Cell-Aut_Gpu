@@ -118,12 +118,49 @@ impl GpuBuffers {
         })
     }
 
+    /// BGL for inline-neighbour mode (no neighbour table).
+    pub fn compute_bgl_inline(device: &Arc<wgpu::Device>) -> wgpu::BindGroupLayout {
+        device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("compute_bgl_inline"),
+            entries: &[
+                Self::storage_entry(0, true),  //cells_current
+                Self::storage_entry(1, false), //cells_next
+            ],
+        })
+    }
+
+    /// BGL for GPU-resident chunked compute pass.
+    pub fn compute_bgl_chunked(device: &Arc<wgpu::Device>) -> wgpu::BindGroupLayout {
+        device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("compute_bgl_chunked"),
+            entries: &[
+                Self::storage_entry(0, true),  //cells_current
+                Self::storage_entry(1, false), //cells_next
+                Self::storage_entry(2, true),  //boundary
+                Self::uniform_entry(3),        //chunk_params
+            ],
+        })
+    }
+
     fn storage_entry(binding: u32, read_only: bool) -> wgpu::BindGroupLayoutEntry {
         wgpu::BindGroupLayoutEntry {
             binding,
             visibility: wgpu::ShaderStages::COMPUTE,
             ty: wgpu::BindingType::Buffer {
                 ty: wgpu::BufferBindingType::Storage { read_only },
+                has_dynamic_offset: false,
+                min_binding_size: None,
+            },
+            count: None,
+        }
+    }
+
+    fn uniform_entry(binding: u32) -> wgpu::BindGroupLayoutEntry {
+        wgpu::BindGroupLayoutEntry {
+            binding,
+            visibility: wgpu::ShaderStages::COMPUTE,
+            ty: wgpu::BindingType::Buffer {
+                ty: wgpu::BufferBindingType::Uniform,
                 has_dynamic_offset: false,
                 min_binding_size: None,
             },
