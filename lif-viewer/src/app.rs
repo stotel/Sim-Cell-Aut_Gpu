@@ -16,7 +16,7 @@ use gpu_automata::{
         graph::RuleGraph,
         node::{CompareOp, WgslType},
     },
-    topology::grid2d::SquareGrid2D,
+    topology::grid2d::{SquareGrid2D, Wrapping},
     NodeId,
 };
 
@@ -25,12 +25,12 @@ use crate::{
     sidebar::UiState,
 };
 
-pub const PADDING_TOP: usize = 0;
-pub const PADDING_BOT: usize = 0;
-pub const PADDING_LFT: usize = 0;
-pub const PADDING_RGT: usize = 0;
-const DEFAULT_W: usize = 10000;
-const DEFAULT_H: usize = 10000;
+pub const PADDING_TOP: usize = 200;
+pub const PADDING_BOT: usize = 200;
+pub const PADDING_LFT: usize = 200;
+pub const PADDING_RGT: usize = 200;
+const DEFAULT_W: usize = 1000;
+const DEFAULT_H: usize = 1000;
 
 // ── Camera ────────────────────────────────────────────────────────────────────
 
@@ -262,7 +262,7 @@ impl AppState {
 
         let rule_graph = build_gol_rule();
         let schema = gol_schema();
-        let topology = Box::new(SquareGrid2D::new(DEFAULT_W, DEFAULT_H));
+        let topology = Box::new(SquareGrid2D::new(DEFAULT_W, DEFAULT_H).with_wrapping(Wrapping::Torus));
         let initial = random_soup(DEFAULT_W * DEFAULT_H, 0.30);
 
         let engine = AutomataEngine::new(
@@ -563,7 +563,7 @@ impl AppState {
 
         let rule_graph = build_rule_from_parsed(&parsed);
         let schema = gol_schema();
-        let topology = Box::new(SquareGrid2D::new(new_w, new_h));
+        let topology = Box::new(SquareGrid2D::new(new_w, new_h).with_wrapping(Wrapping::Clamp));
         let empty = schema.zero_buffer(new_w * new_h);
 
         self.engine = AutomataEngine::new(
