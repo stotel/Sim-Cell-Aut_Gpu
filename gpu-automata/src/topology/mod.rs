@@ -1,7 +1,3 @@
-// Neighbour table layout (flat GPU buffer):
-//   neighbor_table[ cell_index * neighbor_count + k ] = index of the k-th neighbour,
-//   or u32::MAX (0xFFFF_FFFF) when the slot is absent (boundary).
-
 pub mod grid2d;
 pub mod grid3d;
 pub mod hex;
@@ -38,15 +34,11 @@ pub trait Topology: Send + Sync {
     /// Human-readable name used in debug labels.
     fn name(&self) -> &str;
 
-    // ── Inline neighbour WGSL ─────────────────────────────────────────
-
     /// Return WGSL code defining `fn get_neighbor(cell_index: u32, slot: u32) -> u32`.
     /// When `Some`, the engine omits the neighbour-table buffer entirely.
     fn wgsl_neighbor_fn(&self) -> Option<String> {
         None
     }
-
-    // ── GPU-resident chunking ─────────────────────────────────────────
 
     fn supports_gpu_chunks(&self) -> bool {
         false

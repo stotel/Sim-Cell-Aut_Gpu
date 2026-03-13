@@ -1,14 +1,12 @@
-// ── shader/templates.rs ───────────────────────────────────────────────────────
-
 pub const WORKGROUP_SIZE: u32 = 256;
 
 /// Render vertex-shader preamble.
 /// Uses `CameraUniforms` for camera transform; grid dims are inside the struct.
 pub const RENDER_VERT_PREAMBLE: &str = r#"
-// Camera + grid uniforms (binding 1).
-// cell_w / cell_h  – NDC size of one cell (encodes zoom + aspect ratio).
-// cam_x  / cam_y   – camera centre in grid-cell units.
-// grid_w / grid_h  – number of cells (needed to decode instance index).
+
+
+
+
 struct CameraUniforms {
     cell_w : f32,
     cell_h : f32,
@@ -22,8 +20,8 @@ struct CameraUniforms {
 
 @group(0) @binding(1) var<uniform> camera: CameraUniforms;
 
-// Unit-quad vertex offsets (two CCW triangles).
-// Must be var<private> — WGSL const arrays only allow compile-time indices.
+
+
 var<private> QUAD_VERTS: array<vec2<f32>, 6> = array<vec2<f32>, 6>(
     vec2<f32>(-0.5, -0.5),
     vec2<f32>( 0.5, -0.5),

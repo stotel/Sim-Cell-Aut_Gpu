@@ -106,7 +106,9 @@ impl SquareGrid2D {
         for (k, &(dx, dy)) in self.neighborhood.offsets().iter().enumerate() {
             s.push_str(&format!(
                 "        case {k}u: {{ dx = {dx}; dy = {dy}; }}\n",
-                k = k, dx = dx, dy = dy,
+                k = k,
+                dx = dx,
+                dy = dy,
             ));
         }
         s.push_str("        default: { return 0xFFFFFFFFu; }\n");
@@ -164,8 +166,6 @@ impl Topology for SquareGrid2D {
         "SquareGrid2D"
     }
 
-    // ── Inline neighbour WGSL ────────────────────────────────────────────
-
     fn wgsl_neighbor_fn(&self) -> Option<String> {
         let w = self.width;
         let h = self.height;
@@ -195,8 +195,6 @@ impl Topology for SquareGrid2D {
         s.push_str("}\n");
         Some(s)
     }
-
-    // ── GPU-resident chunking ────────────────────────────────────────────
 
     fn supports_gpu_chunks(&self) -> bool {
         self.chunk_rows.is_some()
@@ -232,7 +230,6 @@ impl Topology for SquareGrid2D {
 
         let mut copies = Vec::new();
 
-        // Top boundary: last row of the chunk above
         match self.wrapping {
             Wrapping::Torus => {
                 let src_c = if c == 0 { n - 1 } else { c - 1 };
@@ -258,7 +255,6 @@ impl Topology for SquareGrid2D {
             }
         }
 
-        // Bottom boundary: first row of the chunk below
         match self.wrapping {
             Wrapping::Torus => {
                 let src_c = if c == n - 1 { 0 } else { c + 1 };
@@ -315,7 +311,7 @@ impl Topology for SquareGrid2D {
         s.push_str("    }\n");
         s.push_str("    let nx: i32 = i32(x) + dx;\n");
         s.push_str("    let ny: i32 = i32(y) + dy;\n");
-        // X wrapping
+
         match self.wrapping {
             Wrapping::Torus => {
                 s.push_str("    let wx: u32 = u32((nx % i32(W) + i32(W)) % i32(W));\n");
@@ -325,16 +321,15 @@ impl Topology for SquareGrid2D {
                 s.push_str("    let wx: u32 = u32(nx);\n");
             }
         }
-        // Y: check global bounds, then check boundary
+
         s.push_str("    let global_y: i32 = i32(strip_y0) + ny;\n");
         match self.wrapping {
             Wrapping::Clamp => {
                 s.push_str("    if (global_y < 0 || global_y >= i32(H)) { return 0xFFFFFFFFu; }\n");
             }
-            Wrapping::Torus => {} // boundary copies handle torus wrap
+            Wrapping::Torus => {}
         }
-        // If y is above or below the strip, index into the boundary buffer
-        // Boundary layout: [top_row (W cells) | bottom_row (W cells)]
+
         s.push_str("    if (ny < 0) { return 0x80000000u | wx; }\n");
         s.push_str("    if (ny >= i32(strip_h)) { return 0x80000000u | (W + wx); }\n");
         s.push_str("    return u32(ny) * W + wx;\n");
@@ -348,7 +343,7 @@ impl Topology for SquareGrid2D {
             return;
         }
         let row_bytes = (self.width * cell_byte_size) as u64;
-        // Use 90% of max to leave room for boundary buffers / uniforms
+
         let max_rows = ((max_buffer_bytes * 9 / 10) / row_bytes) as usize;
         self.chunk_rows = Some(max_rows.max(1));
     }

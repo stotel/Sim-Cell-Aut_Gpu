@@ -23,7 +23,6 @@ impl GpuBuffers {
             usage: cell_usage,
         });
 
-        //cells[1] starts zeroed
         let cell_b = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("cells[1]"),
             size: initial_cells.len() as u64,
@@ -96,9 +95,9 @@ impl GpuBuffers {
         device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("compute_bgl"),
             entries: &[
-                Self::storage_entry(0, true),  //cells_current
-                Self::storage_entry(1, false), //cells_next
-                Self::storage_entry(2, true),  //neighbor_table
+                Self::storage_entry(0, true),
+                Self::storage_entry(1, false),
+                Self::storage_entry(2, true),
             ],
         })
     }
@@ -108,12 +107,12 @@ impl GpuBuffers {
         device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("compute_bgl_sparse"),
             entries: &[
-                Self::storage_entry(0, true),  //cells_current
-                Self::storage_entry(1, false), //cells_next
-                Self::storage_entry(2, true),  //neighbor_table
-                Self::storage_entry(3, true),  //active_cells
-                Self::storage_entry(4, false), //next_active_cells
-                Self::storage_entry(5, false), //next_active_count (atomic)
+                Self::storage_entry(0, true),
+                Self::storage_entry(1, false),
+                Self::storage_entry(2, true),
+                Self::storage_entry(3, true),
+                Self::storage_entry(4, false),
+                Self::storage_entry(5, false),
             ],
         })
     }
@@ -122,10 +121,7 @@ impl GpuBuffers {
     pub fn compute_bgl_inline(device: &Arc<wgpu::Device>) -> wgpu::BindGroupLayout {
         device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("compute_bgl_inline"),
-            entries: &[
-                Self::storage_entry(0, true),  //cells_current
-                Self::storage_entry(1, false), //cells_next
-            ],
+            entries: &[Self::storage_entry(0, true), Self::storage_entry(1, false)],
         })
     }
 
@@ -134,10 +130,10 @@ impl GpuBuffers {
         device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("compute_bgl_chunked"),
             entries: &[
-                Self::storage_entry(0, true),  //cells_current
-                Self::storage_entry(1, false), //cells_next
-                Self::storage_entry(2, true),  //boundary
-                Self::uniform_entry(3),        //chunk_params
+                Self::storage_entry(0, true),
+                Self::storage_entry(1, false),
+                Self::storage_entry(2, true),
+                Self::uniform_entry(3),
             ],
         })
     }

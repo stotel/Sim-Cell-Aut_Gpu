@@ -1,26 +1,3 @@
-// ── sparse/active_set.rs ──────────────────────────────────────────────────────
-//
-// Sparse update system
-// ─────────────────────
-// Most cellular automata have large "dead" regions that don't change every
-// step.  The sparse system skips those cells:
-//
-//   active_cells[]     – indices of cells to process this step
-//   next_active_cells[]– cells that should be active next step
-//   next_active_count  – atomic counter (single element, used by the GPU)
-//
-// After each compute dispatch:
-//   1. Read back `next_active_count` (map buffer → copy to CPU).
-//   2. The next dispatch only covers `next_active_count` threads.
-//   3. Swap active ↔ next_active.
-//
-// The GPU shader handles writing to next_active_cells using the
-// `activate_cell()` helper emitted by `ShaderBuilder`.
-//
-// All buffers are pre-allocated to `max_active_cells`.  If the active set
-// overflows the buffer is silently truncated; choose `max_active_cells`
-// conservatively (e.g. full cell_count).
-
 #[allow(unused_imports)]
 use bytemuck;
 use std::sync::Arc;
@@ -48,7 +25,6 @@ impl SparseActiveSet {
     pub fn new(device: &Arc<wgpu::Device>, initial: &[u32], max_active: usize) -> Self {
         use wgpu::BufferUsages as Bu;
 
-        // Pad the initial set to max_active with u32::MAX sentinels.
         let mut seed = vec![u32::MAX; max_active];
         let n = initial.len().min(max_active);
         seed[..n].copy_from_slice(&initial[..n]);
@@ -66,7 +42,6 @@ impl SparseActiveSet {
             mapped_at_creation: false,
         });
 
-        // Atomic counter: 4 bytes for one u32.
         let next_count_buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("sparse:next_count"),
             contents: bytemuck::bytes_of(&0u32),
@@ -94,9 +69,8 @@ impl SparseActiveSet {
     ///   1. Copy `next_count_buf` → `readback_buf` (so the CPU can read it).
     ///   2. Clear `next_count_buf` back to zero for the next dispatch.
     pub fn encode_post_step(&self, encoder: &mut wgpu::CommandEncoder, queue: &wgpu::Queue) {
-        // Copy count to readback buffer
         encoder.copy_buffer_to_buffer(&self.next_count_buf, 0, &self.readback_buf, 0, 4);
-        // Zero the counter
+
         queue.write_buffer(&self.next_count_buf, 0, bytemuck::bytes_of(&0u32));
     }
 

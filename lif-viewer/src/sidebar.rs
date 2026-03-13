@@ -1,5 +1,3 @@
-// Builds the egui left-panel sidebar every frame.
-
 #[derive(Debug)]
 pub struct UiState {
     pub fps: f64,
@@ -37,7 +35,6 @@ impl Default for UiState {
 
 pub const SIDEBAR_WIDTH: f32 = 220.0;
 
-//draw side panel
 pub fn build(ctx: &egui::Context, state: &mut UiState) {
     egui::SidePanel::left("sidebar")
         .exact_width(SIDEBAR_WIDTH)
@@ -158,10 +155,7 @@ pub fn build(ctx: &egui::Context, state: &mut UiState) {
         .show(ctx, |_ui| {});
 }
 
-//Helpers
-
 fn format_large(n: u64) -> String {
-    //Insert thin spaces as thousands separators.
     let s = n.to_string();
     let mut out = String::with_capacity(s.len() + s.len() / 3);
     for (i, ch) in s.chars().rev().enumerate() {

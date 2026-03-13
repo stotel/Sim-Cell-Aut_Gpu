@@ -54,8 +54,6 @@ struct GpuChunkedState {
     render_enabled: bool,
 }
 
-// ───────────────────────────────────────────────────────────────────────────────
-
 ///Configuration passed to `AutomataEngine::new`.
 pub struct EngineConfig {
     ///Enable the sparse active-cell optimisation.
@@ -110,7 +108,6 @@ impl AutomataEngine {
         let cell_byte_size = schema.cell_byte_size();
         let cell_count = topology.cell_count();
 
-        // Auto-configure chunking when a single buffer would exceed the limit.
         let max_buf = device.limits().max_storage_buffer_binding_size as u64;
         topology.auto_configure_chunks(max_buf, cell_byte_size);
 
@@ -118,14 +115,12 @@ impl AutomataEngine {
         let use_chunks = topology.supports_gpu_chunks();
         let compiled_rule = RuleCompiler::new(rule_graph).compile();
 
-        // Skip the expensive neighbour table when topology provides inline WGSL.
         let neighbor_data = if has_inline_neighbors || use_chunks {
             vec![0u32]
         } else {
             topology.generate_neighbor_table()
         };
 
-        // ── Chunked path ──────────────────────────────────────────────────
         if use_chunks {
             let chunked_wgsl = ShaderBuilder {
                 schema: &schema,
@@ -142,7 +137,6 @@ impl AutomataEngine {
 
             log::debug!("Generated chunked compute shader:\n{}", &chunked_wgsl);
 
-            // Standard shader – only for the ComputePipelineSet the renderer needs.
             let standard_wgsl = ShaderBuilder {
                 schema: &schema,
                 neighbor_count: topology.neighbor_count(),
@@ -156,18 +150,19 @@ impl AutomataEngine {
             }
             .build();
 
-            // In chunked mode, avoid allocating full-grid standard buffers.
             let placeholder_cells = [0u8; 4];
             let placeholder_neighbors = [0u32; 1];
             let buffers = GpuBuffers::new(&device, &placeholder_cells, &placeholder_neighbors);
-            let pipeline =
-                ComputePipelineSet::new(&device, &standard_wgsl, &buffers, None, true);
+            let pipeline = ComputePipelineSet::new(&device, &standard_wgsl, &buffers, None, true);
 
             let gpu_chunked = Self::build_gpu_chunked_state(
-                &device, &topology, &schema, &chunked_wgsl, &initial_cells,
+                &device,
+                &topology,
+                &schema,
+                &chunked_wgsl,
+                &initial_cells,
             );
 
-            // Seed the composite render buffer only if it exists at full size.
             if gpu_chunked.render_enabled {
                 queue.write_buffer(&gpu_chunked.render_buf, 0, &initial_cells);
             }
@@ -188,7 +183,6 @@ impl AutomataEngine {
             };
         }
 
-        // ── Standard path ─────────────────────────────────────────────────
         let wgsl_src = ShaderBuilder {
             schema: &schema,
             neighbor_count: topology.neighbor_count(),
@@ -240,8 +234,6 @@ impl AutomataEngine {
             has_inline_neighbors,
         }
     }
-
-    // ── Chunked-state builder ─────────────────────────────────────────────
 
     fn build_gpu_chunked_state(
         device: &Arc<wgpu::Device>,
@@ -333,12 +325,10 @@ impl AutomataEngine {
                 usage: Bu::UNIFORM | Bu::COPY_DST,
             });
 
-            let bg0 = pipeline.make_chunk_bind_group(
-                device, &cells_a, &cells_b, &boundary, &params_buf,
-            );
-            let bg1 = pipeline.make_chunk_bind_group(
-                device, &cells_b, &cells_a, &boundary, &params_buf,
-            );
+            let bg0 =
+                pipeline.make_chunk_bind_group(device, &cells_a, &cells_b, &boundary, &params_buf);
+            let bg1 =
+                pipeline.make_chunk_bind_group(device, &cells_b, &cells_a, &boundary, &params_buf);
 
             let bnd_copies = boundary_desc.map_or_else(Vec::new, |d| d.copies);
 
@@ -363,8 +353,6 @@ impl AutomataEngine {
             render_enabled,
         }
     }
-
-    // ── Stepping ──────────────────────────────────────────────────────────
 
     ///Advance the simulation by one step.
     pub fn step(&mut self) {
@@ -433,7 +421,6 @@ impl AutomataEngine {
                 label: Some(&format!("chunked_step_{}", self.step_count)),
             });
 
-        // Phase 1: boundary copies between chunks
         for c in 0..state.chunks.len() {
             let copies: Vec<_> = state.chunks[c].boundary_copies.clone();
             for copy in &copies {
@@ -448,7 +435,6 @@ impl AutomataEngine {
             }
         }
 
-        // Phase 2: dispatch per-chunk compute
         for chunk in &state.chunks {
             let wg = (chunk.own_count + WORKGROUP_SIZE - 1) / WORKGROUP_SIZE;
             let max_x: u32 = 65535;
@@ -467,7 +453,6 @@ impl AutomataEngine {
             pass.dispatch_workgroups(wg_x, wg_y, 1);
         }
 
-        // Phase 3: copy results to composite render buffer
         if state.render_enabled {
             for chunk in &state.chunks {
                 let next_buf = &chunk.cells[1 - chunk.front];
@@ -484,17 +469,13 @@ impl AutomataEngine {
 
         self.queue.submit(std::iter::once(encoder.finish()));
 
-        // Phase 4: swap front
         for chunk in &mut state.chunks {
             chunk.front = 1 - chunk.front;
         }
     }
 
-    // ── Resize / upload / query ───────────────────────────────────────────
-
     ///Rebuild buffers for a new topology. Cells are zero-initialised.
     pub fn resize(&mut self, new_topology: Box<dyn Topology>) {
-        // Full rebuild — drop chunked state.
         self.gpu_chunked = None;
 
         let cell_count = new_topology.cell_count();
@@ -561,11 +542,11 @@ impl AutomataEngine {
                         mapped_at_creation: false,
                     });
 
-                    let mut encoder = self
-                        .device
-                        .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                            label: Some("chunk_readback_encoder"),
-                        });
+                    let mut encoder =
+                        self.device
+                            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                                label: Some("chunk_readback_encoder"),
+                            });
                     encoder.copy_buffer_to_buffer(
                         &chunk.cells[chunk.front],
                         0,

@@ -1,9 +1,3 @@
-// ── lif-viewer/src/main.rs ────────────────────────────────────────────────────
-//
-// Mouse:    scroll = zoom toward cursor  |  middle-drag = pan
-// Keyboard: arrows = pan  |  +/= = zoom in  |  - = zoom out
-//           Space = pause  |  S = step  |  R = reset  |  O = open  |  Esc = quit
-
 mod app;
 mod lif_parser;
 mod sidebar;
@@ -42,7 +36,7 @@ impl App {
     /// i.e. NOT over the egui sidebar.
     fn over_viewport(state: &AppState) -> bool {
         let scale = state.window.scale_factor() as f32;
-        let sidebar_phys = SIDEBAR_WIDTH * scale; // logical → physical px
+        let sidebar_phys = SIDEBAR_WIDTH * scale;
         state.mouse_pos.0 > sidebar_phys
     }
 }
@@ -80,10 +74,8 @@ impl ApplicationHandler for App {
             return;
         };
 
-        // Continuous camera movement from held arrow / zoom keys.
-        // Amount is in grid-cell units per frame (pan) or zoom factor per frame.
-        let pan_step = 2.0_f32; // grid cells per frame
-        let zoom_step = 0.05_f32; // fractional zoom per frame
+        let pan_step = 2.0_f32;
+        let zoom_step = 0.05_f32;
 
         let mut dx = 0.0_f32;
         let mut dy = 0.0_f32;
@@ -126,11 +118,7 @@ impl ApplicationHandler for App {
             return;
         };
 
-        // Always feed to egui so the sidebar stays interactive.
         state.on_window_event(&event);
-        // NOTE: we do NOT use the `consumed` return value to gate camera input —
-        // egui marks scroll/click as consumed even over the transparent central
-        // panel.  Instead we use `over_viewport()` based on cursor position.
 
         match &event {
             WindowEvent::CloseRequested => event_loop.exit(),
@@ -138,33 +126,27 @@ impl ApplicationHandler for App {
             WindowEvent::RedrawRequested => state.update_and_render(),
             WindowEvent::DroppedFile(path) => state.load_file(path),
 
-            // ── Cursor tracking (always, so pan works immediately) ─────────
             WindowEvent::CursorMoved { position, .. } => {
                 state.on_cursor_moved(position.x as f32, position.y as f32);
             }
 
-            // ── Mouse wheel → zoom toward cursor ──────────────────────────
-            // Guard: only when cursor is over the viewport, not the sidebar.
             WindowEvent::MouseWheel { delta, .. } if Self::over_viewport(state) => {
                 let lines = match delta {
                     MouseScrollDelta::LineDelta(_, y) => *y,
                     MouseScrollDelta::PixelDelta(pos) => pos.y as f32 / 40.0,
                 };
-                // scroll up (positive y on most platforms) = zoom in
+
                 state.on_scroll(lines);
             }
 
-            // ── Middle mouse → pan drag ────────────────────────────────────
             WindowEvent::MouseInput {
                 button: MouseButton::Middle,
                 state: btn_state,
                 ..
             } => {
-                // Allow panning from anywhere (even over sidebar feels natural)
                 state.on_middle_button(*btn_state == ElementState::Pressed);
             }
 
-            // ── Keyboard ──────────────────────────────────────────────────
             WindowEvent::KeyboardInput {
                 event:
                     KeyEvent {
@@ -174,7 +156,6 @@ impl ApplicationHandler for App {
                     },
                 ..
             } => {
-                // Track held keys (arrows, zoom) for smooth per-frame movement.
                 match key_state {
                     ElementState::Pressed => {
                         self.held_keys.insert(*code);
@@ -184,7 +165,6 @@ impl ApplicationHandler for App {
                     }
                 }
 
-                // One-shot actions only on press.
                 if *key_state == ElementState::Pressed {
                     match code {
                         KeyCode::Escape => event_loop.exit(),

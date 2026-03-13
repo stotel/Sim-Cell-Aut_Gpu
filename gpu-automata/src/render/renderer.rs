@@ -1,11 +1,3 @@
-// ── render/renderer.rs ────────────────────────────────────────────────────────
-//
-// Instanced quad renderer.  One draw call = entire grid.
-//
-// Bind group (group 0):
-//   0 – cells (storage, read-only)
-//   1 – CameraUniforms (uniform)
-
 use std::sync::Arc;
 
 use bytemuck::{Pod, Zeroable};
@@ -13,8 +5,6 @@ use wgpu::util::DeviceExt;
 
 use crate::automata::engine::AutomataEngine;
 use crate::shader::builder::ShaderBuilder;
-
-// ── Camera / grid uniform ─────────────────────────────────────────────────────
 
 /// GPU-side camera + grid uniform.
 ///
@@ -70,8 +60,6 @@ pub fn cell_ndc(grid_w: u32, grid_h: u32, win_w: u32, win_h: u32, zoom: f32) -> 
     (cell_w, cell_h)
 }
 
-// ── Renderer ──────────────────────────────────────────────────────────────────
-
 pub struct Renderer {
     pipeline: wgpu::RenderPipeline,
     single_bind_group: Option<wgpu::BindGroup>,
@@ -106,8 +94,6 @@ impl Renderer {
             source: wgpu::ShaderSource::Wgsl(wgsl.into()),
         });
 
-        // Initial camera: fit grid, centre view, win size unknown → use 1×1.
-        // Caller should call update_camera() after construction with real dims.
         let init_cam = CameraUniforms::fit(grid_w, grid_h, 1, 1);
         let camera_buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("camera_uniforms"),
@@ -172,8 +158,6 @@ impl Renderer {
         }
     }
 
-    // ── Update methods ────────────────────────────────────────────────────────
-
     /// Upload new camera / grid uniforms (call every frame or when anything changes).
     pub fn update_camera(&self, queue: &wgpu::Queue, uniforms: &CameraUniforms) {
         queue.write_buffer(&self.camera_buf, 0, bytemuck::bytes_of(uniforms));
@@ -190,13 +174,8 @@ impl Renderer {
             if let Some(chunks) = engine.render_chunk_views() {
                 for chunk in chunks {
                     let chunk_uniform = Self::make_chunk_uniform_buf(device, chunk.base_cell);
-                    let bg = Self::make_bg(
-                        device,
-                        &bgl,
-                        chunk.cells,
-                        &self.camera_buf,
-                        &chunk_uniform,
-                    );
+                    let bg =
+                        Self::make_bg(device, &bgl, chunk.cells, &self.camera_buf, &chunk_uniform);
                     self.chunk_uniform_bufs.push(chunk_uniform);
                     self.chunk_draws.push(ChunkRenderDraw {
                         bind_group: bg,
@@ -217,8 +196,6 @@ impl Renderer {
         }
         self.cell_count = engine.cell_count() as u32;
     }
-
-    // ── Rendering ─────────────────────────────────────────────────────────────
 
     /// Record draw commands into `encoder` targeting `view`.
     /// Uses `LoadOp::Clear` so it paints the dark background first.
@@ -254,8 +231,6 @@ impl Renderer {
             }
         }
     }
-
-    // ── Private helpers ───────────────────────────────────────────────────────
 
     fn make_bgl(device: &Arc<wgpu::Device>) -> wgpu::BindGroupLayout {
         device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {

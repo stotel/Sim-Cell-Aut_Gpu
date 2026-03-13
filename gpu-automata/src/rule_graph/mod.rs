@@ -1,4 +1,3 @@
-// ── rule_graph/mod.rs ─────────────────────────────────────────────────────────
 pub mod compiler;
 pub mod graph;
 pub mod node;

@@ -32,8 +32,6 @@ pub const PADDING_RGT: usize = 200;
 const DEFAULT_W: usize = 1000;
 const DEFAULT_H: usize = 1000;
 
-// ── Camera ────────────────────────────────────────────────────────────────────
-
 /// 2-D camera: pan + zoom.  Lives in CPU; converted to `CameraUniforms` each frame.
 struct Camera {
     /// Zoom multiplier.  1.0 = fit the whole grid in the window.
@@ -87,19 +85,16 @@ impl Camera {
     ) {
         let old_px = self.cell_px(grid_w, grid_h, win_w, win_h);
 
-        // Clamp zoom to [0.05, 200]
         self.zoom = (self.zoom * (1.0 + delta * 0.12)).clamp(0.05, 200.0);
 
         let new_px = self.cell_px(grid_w, grid_h, win_w, win_h);
 
-        // World position under cursor (before zoom)
         let cx = win_w as f32 / 2.0;
         let cy = win_h as f32 / 2.0;
-        // NDC y is up, screen y is down → negate y component
+
         let world_x = self.pan_x + (px - cx) / old_px;
         let world_y = self.pan_y - (py - cy) / old_px;
 
-        // After zoom, keep that world point under the cursor
         self.pan_x = world_x - (px - cx) / new_px;
         self.pan_y = world_y + (py - cy) / new_px;
     }
@@ -107,13 +102,11 @@ impl Camera {
     /// Pan by a screen-space delta (physical pixels).
     fn pan_by(&mut self, dx: f32, dy: f32, grid_w: u32, grid_h: u32, win_w: u32, win_h: u32) {
         let cpx = self.cell_px(grid_w, grid_h, win_w, win_h);
-        // screen x+ → grid x+, screen y+ (down) → grid y- (because NDC y is up)
+
         self.pan_x -= dx / cpx;
         self.pan_y += dy / cpx;
     }
 }
-
-// ── FPS counter ───────────────────────────────────────────────────────────────
 
 struct FpsCounter {
     samples: std::collections::VecDeque<Instant>,
@@ -148,8 +141,6 @@ impl FpsCounter {
     }
 }
 
-// ── AppState ──────────────────────────────────────────────────────────────────
-
 pub struct AppState {
     pub window: Arc<Window>,
     surface: wgpu::Surface<'static>,
@@ -164,11 +155,10 @@ pub struct AppState {
     grid_h: usize,
     last_pattern: Option<LifPattern>,
 
-    // Camera
     camera: Camera,
     middle_down: bool,
-    last_mouse: Option<(f32, f32)>, // physical pixels, last CursorMoved pos
-    pub mouse_pos: (f32, f32),      // current cursor position
+    last_mouse: Option<(f32, f32)>,
+    pub mouse_pos: (f32, f32),
 
     egui_ctx: egui::Context,
     egui_state: egui_winit::State,
@@ -262,7 +252,8 @@ impl AppState {
 
         let rule_graph = build_gol_rule();
         let schema = gol_schema();
-        let topology = Box::new(SquareGrid2D::new(DEFAULT_W, DEFAULT_H).with_wrapping(Wrapping::Torus));
+        let topology =
+            Box::new(SquareGrid2D::new(DEFAULT_W, DEFAULT_H).with_wrapping(Wrapping::Torus));
         let initial = random_soup(DEFAULT_W * DEFAULT_H, 0.30);
 
         let engine = AutomataEngine::new(
@@ -308,7 +299,6 @@ impl AppState {
 
         let camera = Camera::new(DEFAULT_W, DEFAULT_H);
 
-        // Push correct initial camera uniforms
         let win = window.inner_size();
         let init_cam = camera.uniforms(
             DEFAULT_W as u32,
@@ -343,8 +333,6 @@ impl AppState {
         })
     }
 
-    // ── Per-frame ─────────────────────────────────────────────────────────────
-
     pub fn update_and_render(&mut self) {
         if self.ui.fps_limited {
             let target = Duration::from_secs_f64(1.0 / self.ui.fps_limit.max(1.0));
@@ -375,7 +363,6 @@ impl AppState {
                 .update_cell_binding(&self.device, &self.engine);
         }
 
-        // Upload camera uniforms every frame (cheap write_buffer)
         let win = self.window.inner_size();
         let cam_uni = self.camera.uniforms(
             self.grid_w as u32,
@@ -409,8 +396,6 @@ impl AppState {
         self.queue.submit(std::iter::once(encoder.finish()));
         frame.present();
     }
-
-    // ── Window / mouse events ─────────────────────────────────────────────────
 
     pub fn on_window_event(&mut self, event: &winit::event::WindowEvent) -> bool {
         self.egui_state
@@ -502,8 +487,6 @@ impl AppState {
         );
     }
 
-    // ── File loading ──────────────────────────────────────────────────────────
-
     pub fn load_file(&mut self, path: &Path) {
         match lif_parser::parse_file(path) {
             Ok(pat) => {
@@ -586,7 +569,6 @@ impl AppState {
             new_h as u32,
         );
 
-        // Reset camera to fit the new grid
         self.camera = Camera::new(new_w, new_h);
 
         let buf = lif_parser::pattern_to_grid(pat, new_w, new_h, offset_x, offset_y);
@@ -613,8 +595,6 @@ impl AppState {
             }
         }
     }
-
-    // ── egui rendering ────────────────────────────────────────────────────────
 
     fn render_egui(&mut self, encoder: &mut wgpu::CommandEncoder, view: &wgpu::TextureView) {
         let raw_input = self.egui_state.take_egui_input(&self.window);
@@ -664,8 +644,6 @@ impl AppState {
         }
     }
 }
-
-// ── Rule builders ─────────────────────────────────────────────────────────────
 
 pub fn build_rule_from_parsed(rule: &ParsedRule) -> RuleGraph {
     let mut g = RuleGraph::new();

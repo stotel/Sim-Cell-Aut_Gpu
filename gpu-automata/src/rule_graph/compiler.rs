@@ -208,10 +208,10 @@ impl<'a> RuleCompiler<'a> {
                                 }}\n
                              }}\n    
                              let {var}: f32 = {acc};\n",
-                        acc   = acc,
-                        i     = i,
+                        acc = acc,
+                        i = i,
                         field = field_name,
-                        var   = var,
+                        var = var,
                     ));
                     s
                 }

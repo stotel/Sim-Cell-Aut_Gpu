@@ -1,7 +1,6 @@
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct NodeId(pub usize);
 
-//types that nodes can produce.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WgslType {
     U32,
@@ -19,7 +18,6 @@ impl WgslType {
     }
 }
 
-//Comparison operators
 #[derive(Debug, Clone, Copy)]
 pub enum CompareOp {
     Eq,
@@ -49,14 +47,12 @@ impl CompareOp {
 ///except `SetField` nodes, which emit direct assignments to `result_cell`.
 #[derive(Debug, Clone)]
 pub enum NodeKind {
-    // Literals
     /// A constant f32
     ConstantF32(f32),
 
     /// A constant u32
     ConstantU32(u32),
 
-    // Arithmetic (both inputs must share a type)
     /// `a + b`  
     Add(NodeId, NodeId),
 
@@ -69,7 +65,6 @@ pub enum NodeKind {
     /// `a / b`
     Divide(NodeId, NodeId),
 
-    // Logic / Comparison
     /// `a <op> b` gives `bool`
     Compare {
         lhs: NodeId,
@@ -94,7 +89,6 @@ pub enum NodeKind {
     ///Logical NOT of a bool node.
     Not(NodeId),
 
-    // Cell accessors
     ///Read a field from the current (self) cell.
     SelfField { field_name: String },
 
@@ -106,14 +100,12 @@ pub enum NodeKind {
     ///Always produces `f32` (casts u32 fields automatically).
     NeighborSum { field_name: String },
 
-    // Type casts
     ///Cast a value to `f32`.
     CastF32(NodeId),
 
     ///Cast a value to `u32` (truncation / bool→0/1).
     CastU32(NodeId),
 
-    // Output
     ///Write a computed value into a field of `result_cell`.
     ///Does **not** produce an output variable itself.
     SetField { field_name: String, value: NodeId },

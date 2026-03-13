@@ -18,7 +18,7 @@ impl FieldType {
 
     ///Byte size of one value.
     pub fn byte_size(self) -> usize {
-        4 //to update if more types are implemented
+        4
     }
 }
 

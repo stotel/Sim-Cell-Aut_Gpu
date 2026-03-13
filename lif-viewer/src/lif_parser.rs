@@ -1,12 +1,3 @@
-// Parses Game of Life pattern files into a flat list of alive-cell coordinates.
-//
-// Supported formats:
-//   RLE  (.rle / .lif)  – run-length-encoded, b/o/$/ ! delimiters
-//
-// Header line format
-//   x = 192, y = 69, rule = B2/S
-//   x = 36,  y = 9,  rule = B3/S23
-
 use anyhow::{Context, Result};
 use std::path::Path;
 
@@ -65,8 +56,6 @@ impl LifPattern {
     }
 }
 
-//Rule parsing
-
 ///Birth / survival neighbor-count sets extracted from a rule string.
 #[derive(Debug, Clone, Default)]
 pub struct ParsedRule {
@@ -120,7 +109,6 @@ pub fn parse_rule_string(rule: &str) -> ParsedRule {
     }
 }
 
-//Public API
 pub fn parse_file(path: &Path) -> Result<LifPattern> {
     let content =
         std::fs::read_to_string(path).with_context(|| format!("cannot read {:?}", path))?;
@@ -143,7 +131,6 @@ pub fn pattern_to_grid(
     let min_x = pat.cells.iter().map(|c| c.0).min().unwrap_or(0);
     let min_y = pat.cells.iter().map(|c| c.1).min().unwrap_or(0);
 
-    //Center using effective bounds (declared or computed, whichever is larger).
     let base_x = (grid_w as i32 - pat.effective_w()) / 2 - min_x + offset_x;
     let base_y = (grid_h as i32 - pat.effective_h()) / 2 - min_y + offset_y;
 
@@ -170,7 +157,6 @@ fn parse_rle(content: &str) -> Result<LifPattern> {
     for line in content.lines() {
         let t = line.trim();
 
-        //Comment lines
         if t.starts_with('#') {
             if (t.starts_with("#N") || t.starts_with("#n")) && name.is_none() {
                 let s = t[2..].trim().to_string();
@@ -205,7 +191,6 @@ fn parse_rle(content: &str) -> Result<LifPattern> {
         }
     }
 
-    //Decode RLE
     let mut x = 0i32;
     let mut y = 0i32;
     let mut count = String::new();
@@ -223,7 +208,7 @@ fn parse_rle(content: &str) -> Result<LifPattern> {
                 x = 0;
             }
             '!' => break,
-            //'B' = dead
+
             c if c.is_ascii_alphabetic() && c.to_ascii_uppercase() != 'B' => {
                 let n = count.parse::<i32>().unwrap_or(1);
                 count.clear();

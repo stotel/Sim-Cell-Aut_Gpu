@@ -1,5 +1,3 @@
-// ── shader/builder.rs ─────────────────────────────────────────────────────────
-//
 // `ShaderBuilder` assembles a complete, valid WGSL compute shader from:
 //   1. `CellSchema`      – the `struct Cell { … }` and zero-initialiser.
 //   2. `Topology`        – neighbour count, optional inline `get_neighbor` WGSL.
@@ -58,16 +56,17 @@ impl<'a> ShaderBuilder<'a> {
             self.neighbor_fn.is_some(),
         ));
 
-        // ── Cell struct ───────────────────────────────────────────────────
         src.push_str(&self.schema.generate_wgsl_struct());
         src.push('\n');
 
-        // ── Constants ─────────────────────────────────────────────────────
         src.push_str(&format!(
             "const NEIGHBOR_COUNT: u32 = {}u;\n",
             self.neighbor_count,
         ));
-        src.push_str(&format!("const DISPATCH_X_SIZE: u32 = {}u;\n\n", DISPATCH_X_SIZE));
+        src.push_str(&format!(
+            "const DISPATCH_X_SIZE: u32 = {}u;\n\n",
+            DISPATCH_X_SIZE
+        ));
 
         // ── Storage bindings ──────────────────────────────────────────────
         src.push_str(
@@ -176,7 +175,10 @@ impl<'a> ShaderBuilder<'a> {
             "const NEIGHBOR_COUNT: u32 = {}u;\n",
             self.neighbor_count,
         ));
-        src.push_str(&format!("const DISPATCH_X_SIZE: u32 = {}u;\n\n", DISPATCH_X_SIZE));
+        src.push_str(&format!(
+            "const DISPATCH_X_SIZE: u32 = {}u;\n\n",
+            DISPATCH_X_SIZE
+        ));
 
         // Bindings
         src.push_str(

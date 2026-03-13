@@ -16,8 +16,6 @@ impl RuleGraph {
         id
     }
 
-    // ── Literals ──────────────────────────────────────────────────────────
-
     pub fn const_f32(&mut self, v: f32) -> NodeId {
         self.push(NodeKind::ConstantF32(v), Some(WgslType::F32))
     }
@@ -25,8 +23,6 @@ impl RuleGraph {
     pub fn const_u32(&mut self, v: u32) -> NodeId {
         self.push(NodeKind::ConstantU32(v), Some(WgslType::U32))
     }
-
-    // ── Arithmetic ────────────────────────────────────────────────────────
 
     pub fn add(&mut self, a: NodeId, b: NodeId) -> NodeId {
         let ty = self.nodes[a.0].output_type;
@@ -47,8 +43,6 @@ impl RuleGraph {
         let ty = self.nodes[a.0].output_type;
         self.push(NodeKind::Divide(a, b), ty)
     }
-
-    // ── Logic ─────────────────────────────────────────────────────────────
 
     pub fn compare(&mut self, lhs: NodeId, rhs: NodeId, op: CompareOp) -> NodeId {
         self.push(NodeKind::Compare { lhs, rhs, op }, Some(WgslType::Bool))
@@ -114,8 +108,6 @@ impl RuleGraph {
         )
     }
 
-    // ── Type casts ────────────────────────────────────────────────────────
-
     pub fn cast_f32(&mut self, src: NodeId) -> NodeId {
         self.push(NodeKind::CastF32(src), Some(WgslType::F32))
     }
@@ -134,8 +126,6 @@ impl RuleGraph {
             None,
         )
     }
-
-    // ── Introspection ─────────────────────────────────────────────────────
 
     pub fn node_count(&self) -> usize {
         self.nodes.len()

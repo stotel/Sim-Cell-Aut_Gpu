@@ -1,5 +1,3 @@
-// ── automata/pipeline.rs ──────────────────────────────────────────────────────
-// wgpu 22: entry_point → Option<&str>, cache field added to descriptors.
 use crate::automata::buffers::GpuBuffers;
 use crate::sparse::active_set::SparseActiveSet;
 use std::sync::Arc;
@@ -124,8 +122,6 @@ impl ComputePipelineSet {
         })
     }
 }
-
-// ── Chunked compute pipeline ──────────────────────────────────────────────────
 
 /// Pipeline for the per-chunk GPU-resident compute shader.
 pub struct ChunkedPipeline {
